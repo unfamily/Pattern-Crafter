@@ -13,7 +13,7 @@
       ],
       "B": [
           {"tag": "c:gems/lapis"},
-          {"tag": "minecraft:glow_ink_sac"}
+          {"item": "minecraft:glow_ink_sac"}
       ],
       "C": {
         "item": "pattern_crafter:pattern_crafter"
