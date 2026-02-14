@@ -31,11 +31,9 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * BlockEntity for the Improved Pattern Crafter.
@@ -636,7 +634,7 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
             for (int patternAttempt = 0; patternAttempt < totalPatterns; patternAttempt++) {
                 int patternIndex = (craftingPatternIndex + patternAttempt) % totalPatterns;
                 PatternData pattern = patterns.get(patternIndex);
-                if (isPatternEmpty(pattern) || !hasValidFilterKey(pattern)) continue;
+                if (isPatternEmpty(pattern)) continue;
 
                 if (tryCraftPattern(pattern, prioritySlot)) {
                     craftingPatternIndex = (patternIndex + 1) % totalPatterns;
@@ -842,18 +840,6 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
             if (pattern.getCell(i) != PatternData.EMPTY) return false;
         }
         return true;
-    }
-
-    /** Returns true if the pattern has at least one letter that has a filter (key) assigned. */
-    private boolean hasValidFilterKey(PatternData pattern) {
-        Set<Integer> lettersSeen = new HashSet<>();
-        for (int i = 0; i < PatternData.GRID_SIZE; i++) {
-            int letter = pattern.getCell(i);
-            if (letter != PatternData.EMPTY && lettersSeen.add(letter) && !getAcceptedItemsForLetter(letter).isEmpty()) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
