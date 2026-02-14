@@ -18,7 +18,7 @@
   "gui.pattern_crafter.redstone_mode.4":"Redstone: Disabled",
   "gui.pattern_crafter.save_pattern":"Save",
   "gui.pattern_crafter.mark_input":"Mark Input",
-  "gui.pattern_crafter.mark_input.tooltip.line1":"§7Click to save item filters from current input",
-  "gui.pattern_crafter.mark_input.tooltip.line2":"§7Shift+Click to clear all filters",
-  "gui.pattern_crafter.mark_input.tooltip.line3":"§7Ctrl/Alt+Click to clear filters without matching items"
+  "gui.pattern_crafter.mark_input.tooltip.line1":"§7Click to save mark input from current inventory",
+  "gui.pattern_crafter.mark_input.tooltip.line2":"§7Shift+Click to clear all mark input",
+  "gui.pattern_crafter.mark_input.tooltip.line3":"§7Ctrl/Alt+Click to clear mark input without matching items"
 }

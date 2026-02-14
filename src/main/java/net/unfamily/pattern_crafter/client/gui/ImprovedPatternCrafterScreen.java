@@ -121,16 +121,16 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
                 .build();
         addRenderableWidget(closeButton);
 
-        // Mark Input button: above upgrade slots (same logic as Structure Placer "Filter" / Set Inventory)
-        int upgradeColX = 49;
+        // Mark Input button: same width as forbidden outputs (13 + 3*18 = 54), less tall, above upgrades
+        int forbiddenOutputsX = 13;
+        int forbiddenOutputsW = 3 * 18; // 54
+        int markInputButtonH = 12;
         int upgradeFirstY = 211;
-        int markInputButtonW = 34;
-        int markInputButtonH = 18;
         int markInputButtonY = upgradeFirstY - markInputButtonH - 4;
         markInputButton = Button.builder(
                         Component.translatable("gui.pattern_crafter.mark_input"),
                         btn -> onMarkInputPressed())
-                .bounds(this.leftPos + upgradeColX, this.topPos + markInputButtonY, markInputButtonW, markInputButtonH)
+                .bounds(this.leftPos + forbiddenOutputsX, this.topPos + markInputButtonY, forbiddenOutputsW, markInputButtonH)
                 .build();
         addRenderableWidget(markInputButton);
 
