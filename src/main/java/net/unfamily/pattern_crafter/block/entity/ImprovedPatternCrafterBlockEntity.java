@@ -431,7 +431,8 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
 
     public void setFilterLetter(int index, int value) {
         if (index < 0 || index >= filterLetters.length) return;
-        if (value < 0 || value > getMaxKeyInputs()) value = 0;
+        // A-Z only (1-26); ignore slot-count limit
+        if (value < 0 || value > PatternData.MAX_LETTER) value = 0;
         filterLetters[index] = value;
         setChanged();
     }

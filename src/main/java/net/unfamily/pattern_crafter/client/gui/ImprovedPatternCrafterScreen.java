@@ -18,6 +18,7 @@ import net.unfamily.pattern_crafter.network.packet.FilterLetterUpdateC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.MarkInputC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.PatternCellUpdateC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.PatternSwitchC2SPacket;
+import net.unfamily.pattern_crafter.pattern.PatternData;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -348,8 +349,8 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
             }
         }
 
-        // Max letter = number of input filter slots (18 Normal = A-R, 36 Improved = A-Z + a-j, etc.)
-        int maxLetter = menu.getInputFilterSlotCount();
+        // Letters A-Z only (26); no limit by slot count
+        int maxLetter = PatternData.MAX_LETTER;
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 3; col++) {
                 gridCells[row][col].setMaxLetter(maxLetter);
