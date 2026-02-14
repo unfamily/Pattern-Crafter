@@ -48,13 +48,6 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
             ResourceLocation.fromNamespaceAndPath(PatternCrafter.MODID,
                     "textures/item/fast_module.png");
 
-    /** Craft cooldown indicator: 18x36 = two 18x18 (top=empty/gray, bottom=full/white). Fills from bottom as cooldown progresses. */
-    private static final ResourceLocation CRAFT_COOLDOWN_TEXTURE =
-            ResourceLocation.fromNamespaceAndPath(PatternCrafter.MODID,
-                    "textures/gui/craft.png");
-    private static final int CRAFT_ICON_SIZE = 18;
-    private static final int CRAFT_ICON_HEIGHT = 36;
-
     /** Redstone button: same graphics as iskandert_utilities. Copy medium_buttons.png, redstone_gui.png from iska_utils into pattern_crafter/textures/gui. */
     private static final ResourceLocation MEDIUM_BUTTONS =
             ResourceLocation.fromNamespaceAndPath(PatternCrafter.MODID, "textures/gui/medium_buttons.png");
@@ -523,8 +516,6 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
             renderEnergyBar(guiGraphics);
         }
 
-        // Craft cooldown indicator below center output slot
-        renderCraftCooldown(guiGraphics);
 
         // Redstone mode button (same style as iskandert_utilities)
         renderRedstoneModeButton(guiGraphics, mouseX, mouseY);
@@ -714,37 +705,6 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
                     0, ENERGY_BAR_HEIGHT - energyHeight,
                     ENERGY_BAR_WIDTH, energyHeight,
                     16, 32);
-        }
-    }
-
-    /**
-     * Draws the craft cooldown indicator: background (gray/empty) then fill overlay from bottom.
-     * Texture craft.png is 18x36: top 18px = empty, bottom 18px = full.
-     * Animation: bar fills from bottom as crafting progresses (timer 0 = empty, timer = interval = full).
-     */
-    private void renderCraftCooldown(GuiGraphics guiGraphics) {
-        int x = this.leftPos + 276;
-        int y = this.topPos + 209; // 2px lower than 207
-
-        // Background: full 18x36 using the empty (gray) half of the texture
-        guiGraphics.blit(CRAFT_COOLDOWN_TEXTURE, x, y, 0, 0, CRAFT_ICON_SIZE, CRAFT_ICON_SIZE, CRAFT_ICON_SIZE, CRAFT_ICON_HEIGHT);
-        guiGraphics.blit(CRAFT_COOLDOWN_TEXTURE, x, y + CRAFT_ICON_SIZE, 0, 0, CRAFT_ICON_SIZE, CRAFT_ICON_SIZE, CRAFT_ICON_SIZE, CRAFT_ICON_HEIGHT);
-
-        int timer = menu.getCraftingTimer();
-        int interval = menu.getCraftingInterval();
-        if (interval <= 0) interval = 1;
-        // Fill as cooldown runs: 0 at start -> 1 when craft completes
-        float progress = (float) timer / (float) interval;
-        progress = Math.max(0f, Math.min(1f, progress));
-
-        // Fill overlay: bottom half of texture (full/white), from bottom of the icon upward
-        int fillHeight = (int) (progress * CRAFT_ICON_SIZE);
-        if (fillHeight > 0) {
-            guiGraphics.blit(CRAFT_COOLDOWN_TEXTURE,
-                    x, y + CRAFT_ICON_HEIGHT - fillHeight,
-                    0, CRAFT_ICON_HEIGHT - fillHeight,
-                    CRAFT_ICON_SIZE, fillHeight,
-                    CRAFT_ICON_SIZE, CRAFT_ICON_HEIGHT);
         }
     }
 

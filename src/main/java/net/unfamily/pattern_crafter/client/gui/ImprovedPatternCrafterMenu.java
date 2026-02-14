@@ -327,12 +327,12 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
         }
     }
 
-    // Output: 3 columns x 3 rows at (258, 171) - extract only, no insertion
+    // Output: 3 columns x 3 rows at (259, 171) - extract only, no insertion
     private void addOutputSlots(ItemStackHandler handler) {
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 3; col++) {
                 this.addSlot(new OutputSlot(handler, row * 3 + col,
-                        258 + col * 18, 171 + row * 18));
+                        259 + col * 18, 171 + row * 18));
             }
         }
     }
