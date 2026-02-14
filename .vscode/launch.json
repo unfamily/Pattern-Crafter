@@ -1,0 +1,93 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Client",
+      "presentation": {
+        "group": "Mod Development - Pattern-Crafter",
+        "order": 0
+      },
+      "projectName": "Pattern-Crafter",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@/home/unfamily/IdeaProjects/Pattern-Crafter/build/moddev/clientRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@/home/unfamily/IdeaProjects/Pattern-Crafter/build/moddev/clientRunVmArgs.txt",
+        "-Dfml.modFolders\u003dpattern_crafter%%/home/unfamily/IdeaProjects/Pattern-Crafter/bin/main"
+      ],
+      "cwd": "${workspaceFolder}/run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Data",
+      "presentation": {
+        "group": "Mod Development - Pattern-Crafter",
+        "order": 1
+      },
+      "projectName": "Pattern-Crafter",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@/home/unfamily/IdeaProjects/Pattern-Crafter/build/moddev/dataRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@/home/unfamily/IdeaProjects/Pattern-Crafter/build/moddev/dataRunVmArgs.txt",
+        "-Dfml.modFolders\u003dpattern_crafter%%/home/unfamily/IdeaProjects/Pattern-Crafter/bin/main"
+      ],
+      "cwd": "${workspaceFolder}/run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "GameTestServer",
+      "presentation": {
+        "group": "Mod Development - Pattern-Crafter",
+        "order": 2
+      },
+      "projectName": "Pattern-Crafter",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@/home/unfamily/IdeaProjects/Pattern-Crafter/build/moddev/gameTestServerRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@/home/unfamily/IdeaProjects/Pattern-Crafter/build/moddev/gameTestServerRunVmArgs.txt",
+        "-Dfml.modFolders\u003dpattern_crafter%%/home/unfamily/IdeaProjects/Pattern-Crafter/bin/main"
+      ],
+      "cwd": "${workspaceFolder}/run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Server",
+      "presentation": {
+        "group": "Mod Development - Pattern-Crafter",
+        "order": 3
+      },
+      "projectName": "Pattern-Crafter",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@/home/unfamily/IdeaProjects/Pattern-Crafter/build/moddev/serverRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@/home/unfamily/IdeaProjects/Pattern-Crafter/build/moddev/serverRunVmArgs.txt",
+        "-Dfml.modFolders\u003dpattern_crafter%%/home/unfamily/IdeaProjects/Pattern-Crafter/bin/main"
+      ],
+      "cwd": "${workspaceFolder}/run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    }
+  ]
+}

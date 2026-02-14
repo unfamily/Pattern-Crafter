@@ -1,0 +1,20 @@
+{
+  "block.pattern_crafter.pattern_crafter": "Fabbricatore a Modelli",
+  "block.pattern_crafter.improved_pattern_crafter": "Fabbricatore a Modelli Migliorato",
+  "itemGroup.pattern_crafter": "Fabbricatore a Modelli Migliorato",
+  "gui.pattern_crafter.reset_pattern_tooltip": "Shift+Click per resettare il modello",
+  "gui.pattern_crafter.shift_click_clear": "Shift+Click per svuotare",
+  "gui.pattern_crafter.filter_any_item": "Qualsiasi oggetto",
+  "gui.pattern_crafter.filter_excluding_others": "(esclusi altri filtri specifici)",
+  "gui.pattern_crafter.filter_allowed_item": "Consentito: %s",
+  "gui.pattern_crafter.crafting_mode.both":"Entrambi",
+  "gui.pattern_crafter.crafting_mode.shaped_only":"Solo sagomato",
+  "gui.pattern_crafter.crafting_mode.shapeless_only":"Solo senza forma",
+  "gui.pattern_crafter.forbidden_outputs":"Output vietati",
+  "gui.pattern_crafter.redstone_mode.0":"Redstone: ignorato",
+  "gui.pattern_crafter.redstone_mode.1":"Redstone: basso",
+  "gui.pattern_crafter.redstone_mode.2":"Redstone: alto",
+  "gui.pattern_crafter.redstone_mode.3":"Redstone: impulso",
+  "gui.pattern_crafter.redstone_mode.4":"Redstone: disattivato",
+  "gui.pattern_crafter.save_pattern":"Salva"
+}

@@ -1,0 +1,8 @@
+{
+    "parent":"minecraft:block/cube_bottom_top",
+    "textures":{
+        "bottom":"pattern_crafter:block/pattern_crafter_bottom",
+        "top":"pattern_crafter:block/pattern_crafter_top",
+        "side":"pattern_crafter:block/pattern_crafter_side"
+    }
+}

@@ -1,0 +1,1 @@
+{"variants":{"facing=north":{"model":"pattern_crafter:block/pattern_crafter"},"facing=south":{"model":"pattern_crafter:block/pattern_crafter","y":180},"facing=west":{"model":"pattern_crafter:block/pattern_crafter","y":270},"facing=east":{"model":"pattern_crafter:block/pattern_crafter","y":90}}}

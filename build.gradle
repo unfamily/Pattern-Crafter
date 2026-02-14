@@ -18,6 +18,7 @@ version = mod_version
 group = mod_group_id
 
 repositories {
+    maven { url = 'https://maven.parchmentmc.org/' }
     // Add here additional repositories if required by some of the dependencies below.
 }
 
@@ -112,6 +113,11 @@ configurations {
 }
 
 dependencies {
+    // Optional: iskandert_utilities provides logic module (top upgrade slot) and speed modules (bottom slot).
+    // Use JAR in libs/ or add project dependency for local dev: compileOnly project(':iskandert_utilities')
+    compileOnly files('libs/iska_utils-2.0.0.0.0-neoforge-1.21.1.jar')
+    localRuntime files('libs/iska_utils-2.0.0.0.0-neoforge-1.21.1.jar')
+
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"
