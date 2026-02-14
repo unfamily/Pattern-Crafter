@@ -31,12 +31,13 @@ public class PatternColors {
 
     /**
      * Returns the color for a pattern cell value.
-     * @param value 0 for empty, 1-18 for A-R
+     * @param value 0 for empty, 1-18 for A-R; 19+ cycle through same palette
      * @return ARGB color
      */
     public static int getColor(int value) {
-        if (value < 0 || value >= COLORS.length) return COLORS[0];
-        return COLORS[value];
+        if (value <= 0) return COLORS[0];
+        if (value < COLORS.length) return COLORS[value];
+        return COLORS[1 + (value - 1) % (COLORS.length - 1)]; // 19+ reuse A-R colors
     }
 
     /**

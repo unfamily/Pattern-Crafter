@@ -7,6 +7,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.world.Containers;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingInput;
@@ -41,13 +42,8 @@ import java.util.Set;
  */
 public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
 
-    // 9 columns x 2 rows = 18 ghost slots for input filters
-    private final ItemStackHandler inputFilterHandler = new ItemStackHandler(18) {
-        @Override
-        protected void onContentsChanged(int slot) {
-            setChanged();
-        }
-    };
+    // Input filter ghost slots: count = getMaxKeyInputs() (config: improved 36, normal 18)
+    private ItemStackHandler inputFilterHandler;
 
     // 3 columns x 7 rows = 21 ghost slots for output filters
     private final ItemStackHandler outputFilterHandler = new ItemStackHandler(21) {
@@ -82,11 +78,28 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
         }
     };
 
+    /**
+     * Slot dedication filters for the 27 input slots (like ghostFilters in Structure Placer).
+     * "Mark Input" saves here only; used for isItemValid and GUI ghost display. Not used for crafting.
+     */
+    private final List<ItemStack> markInputFilters = new ArrayList<>();
+
     // 9 columns x 3 rows = 27 input slots (machine internal inventory, hopper can insert)
     private final ItemStackHandler inputHandler = new ItemStackHandler(27) {
         @Override
         protected void onContentsChanged(int slot) {
             setChanged();
+        }
+
+        @Override
+        public boolean isItemValid(int slot, ItemStack stack) {
+            if (slot >= 0 && slot < markInputFilters.size()) {
+                ItemStack filter = markInputFilters.get(slot);
+                if (!filter.isEmpty()) {
+                    return ItemStack.isSameItemSameComponents(stack, filter);
+                }
+            }
+            return true;
         }
     };
 
@@ -94,10 +107,8 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
     private final List<PatternData> patterns = new ArrayList<>();
     private int currentPatternIndex = 0;
 
-    // Filter letter assignments: 0=empty(disabled), 1-18=A-R
-    // Each of the 18 input filter slots has an assigned letter.
-    // When empty, the slot is disabled (darkened, no item insertion).
-    private final int[] filterLetters = new int[18];
+    // Filter letter assignments: 0=empty(disabled), 1..N = letters (N = getMaxKeyInputs())
+    private int[] filterLetters;
 
     // Crafting system
     private int craftingTimer = 0;
@@ -170,7 +181,27 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
     /** For subclasses (e.g. PatternCrafterBlockEntity) that use a different BlockEntityType. */
     protected ImprovedPatternCrafterBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
+        int maxKeys = getMaxKeyInputs();
+        this.inputFilterHandler = new ItemStackHandler(maxKeys) {
+            @Override
+            protected void onContentsChanged(int slot) {
+                setChanged();
+            }
+        };
+        this.filterLetters = new int[maxKeys];
+        for (int i = 0; i < 27; i++) {
+            markInputFilters.add(ItemStack.EMPTY);
+        }
         initPatterns();
+    }
+
+    /** Max key inputs (filter slots / letters) for this machine. Improved: config 36, Normal: config 18. */
+    protected int getMaxKeyInputs() {
+        try {
+            return Math.max(1, Math.min(256, Config.IMPROVED_MAX_KEY_INPUTS.get()));
+        } catch (Exception e) {
+            return 36;
+        }
     }
 
     private void initPatterns() {
@@ -178,6 +209,34 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
         patterns.clear();
         for (int i = 0; i < maxPatterns; i++) {
             patterns.add(new PatternData());
+        }
+    }
+
+    @Override
+    public void setChanged() {
+        super.setChanged();
+        if (level != null && !level.isClientSide()) {
+            level.sendBlockUpdated(getBlockPos(), getBlockState(), getBlockState(), 3);
+        }
+    }
+
+    @Override
+    public net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket getUpdatePacket() {
+        return net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket.create(this);
+    }
+
+    @Override
+    public net.minecraft.nbt.CompoundTag getUpdateTag(net.minecraft.core.HolderLookup.Provider registries) {
+        return saveWithoutMetadata(registries);
+    }
+
+    @Override
+    public void onDataPacket(net.minecraft.network.Connection net,
+            net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket pkt,
+            net.minecraft.core.HolderLookup.Provider registries) {
+        super.onDataPacket(net, pkt, registries);
+        if (pkt.getTag() != null) {
+            loadAdditional(pkt.getTag(), registries);
         }
     }
 
@@ -372,7 +431,7 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
 
     public void setFilterLetter(int index, int value) {
         if (index < 0 || index >= filterLetters.length) return;
-        if (value < 0 || value > PatternData.MAX_LETTER) value = 0;
+        if (value < 0 || value > getMaxKeyInputs()) value = 0;
         filterLetters[index] = value;
         setChanged();
     }
@@ -386,46 +445,56 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
     }
 
     /**
-     * Copy current machine input slots (0-17) to input filter ghosts and assign letters A-R.
-     * Same behaviour as Structure Placer "Filter" / Set Inventory (normal click).
+     * Saves slot-dedication filters from current machine input slots (1:1, 27 slots).
+     * Identical to Structure Placer setInventoryFilters: only slots with an item get their
+     * markInputFilters entry set; empty input slots are left unchanged. Does not touch
+     * inputFilterHandler or filterLetters (those are for crafting only).
      */
     public void setInputFilters() {
-        for (int slot = 0; slot < inputFilterHandler.getSlots(); slot++) {
+        for (int slot = 0; slot < inputHandler.getSlots(); slot++) {
             ItemStack currentStack = inputHandler.getStackInSlot(slot);
             if (!currentStack.isEmpty()) {
                 ItemStack filter = currentStack.copyWithCount(1);
-                inputFilterHandler.setStackInSlot(slot, filter);
-                setFilterLetter(slot, slot + 1); // A=1 .. R=18
-            } else {
-                inputFilterHandler.setStackInSlot(slot, ItemStack.EMPTY);
-                setFilterLetter(slot, 0);
+                markInputFilters.set(slot, filter);
             }
+            // Empty slots remain unchanged (same as iskandert_utilities)
         }
         setChanged();
     }
 
-    /** Clear all input filter ghosts and letters (Shift+Click on Mark Input). */
+    /** Clear all slot-dedication filters (Shift+Click on Mark Input). Does not touch inputFilterHandler. */
     public void clearAllInputFilters() {
-        for (int i = 0; i < inputFilterHandler.getSlots(); i++) {
-            inputFilterHandler.setStackInSlot(i, ItemStack.EMPTY);
-            setFilterLetter(i, 0);
+        for (int i = 0; i < markInputFilters.size(); i++) {
+            markInputFilters.set(i, ItemStack.EMPTY);
         }
         setChanged();
     }
 
-    /** Clear input filter slots that don't have a matching item in the corresponding input slot (Ctrl/Alt+Click). */
+    /** Clear slot-dedication filters where the input slot no longer has the matching item (Ctrl/Alt+Click). */
     public void clearEmptyInputFilters() {
-        for (int slot = 0; slot < inputFilterHandler.getSlots(); slot++) {
-            ItemStack filter = inputFilterHandler.getStackInSlot(slot);
+        for (int slot = 0; slot < markInputFilters.size(); slot++) {
+            ItemStack filter = markInputFilters.get(slot);
             if (!filter.isEmpty()) {
                 ItemStack currentStack = inputHandler.getStackInSlot(slot);
                 if (currentStack.isEmpty() || !ItemStack.isSameItemSameComponents(currentStack, filter)) {
-                    inputFilterHandler.setStackInSlot(slot, ItemStack.EMPTY);
-                    setFilterLetter(slot, 0);
+                    markInputFilters.set(slot, ItemStack.EMPTY);
                 }
             }
         }
         setChanged();
+    }
+
+    /** Returns the slot-dedication filter for the given input slot (for GUI ghost display). */
+    public ItemStack getMarkInputFilter(int slot) {
+        if (slot >= 0 && slot < markInputFilters.size()) {
+            return markInputFilters.get(slot);
+        }
+        return ItemStack.EMPTY;
+    }
+
+    /** Returns true if the given input slot has a mark-input (slot dedication) filter. */
+    public boolean hasMarkInputFilter(int slot) {
+        return getMarkInputFilter(slot).isEmpty() == false;
     }
 
     // ===== Pattern System =====
@@ -961,6 +1030,18 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
         // Save filter letters
         tag.putIntArray("filterLetters", filterLetters.clone());
 
+        // Save mark input (slot dedication) filters, same format as iskandert_utilities ghostFilters
+        CompoundTag markInputTag = new CompoundTag();
+        for (int i = 0; i < markInputFilters.size(); i++) {
+            final int slot = i;
+            ItemStack filter = markInputFilters.get(slot);
+            if (!filter.isEmpty()) {
+                ItemStack.OPTIONAL_CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE), filter)
+                        .result().ifPresent(nbt -> markInputTag.put("slot" + slot, (CompoundTag) nbt));
+            }
+        }
+        tag.put("markInputFilters", markInputTag);
+
         // Save energy
         tag.putInt("Energy", energyStorage.getEnergyStored());
 
@@ -1005,6 +1086,21 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
         if (tag.contains("filterLetters")) {
             int[] saved = tag.getIntArray("filterLetters");
             System.arraycopy(saved, 0, filterLetters, 0, Math.min(saved.length, filterLetters.length));
+        }
+
+        // Load mark input (slot dedication) filters
+        if (tag.contains("markInputFilters")) {
+            CompoundTag markInputTag = tag.getCompound("markInputFilters");
+            for (int i = 0; i < markInputFilters.size(); i++) {
+                String slotKey = "slot" + i;
+                if (markInputTag.contains(slotKey)) {
+                    ItemStack filter = ItemStack.OPTIONAL_CODEC.parse(
+                                    registries.createSerializationContext(NbtOps.INSTANCE),
+                                    markInputTag.get(slotKey))
+                            .result().orElse(ItemStack.EMPTY);
+                    markInputFilters.set(i, filter);
+                }
+            }
         }
 
         // Load energy

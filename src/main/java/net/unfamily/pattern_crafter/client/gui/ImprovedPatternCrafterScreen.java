@@ -99,8 +99,8 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
     // 3x3 pattern grid cells
     private final PatternCellWidget[][] gridCells = new PatternCellWidget[3][3];
 
-    // 18 filter letter labels: [0-8] above row 1, [9-17] below row 2
-    private final PatternCellWidget[] filterLabels = new PatternCellWidget[18];
+    // Filter letter labels: count = menu.getInputFilterSlotCount() (18 or 36, etc.), created in init()
+    private PatternCellWidget[] filterLabels = new PatternCellWidget[0];
 
     public ImprovedPatternCrafterScreen(ImprovedPatternCrafterMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
@@ -121,8 +121,8 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
                 .build();
         addRenderableWidget(closeButton);
 
-        // Mark Input button: same width as forbidden outputs (13 + 3*18 = 54), less tall, above upgrades
-        int forbiddenOutputsX = 13;
+        // Mark Input button: same width as forbidden outputs (3*18 = 54), 1px left of that area, above upgrades
+        int forbiddenOutputsX = 12;
         int forbiddenOutputsW = 3 * 18; // 54
         int markInputButtonH = 12;
         int upgradeFirstY = 211;
@@ -205,37 +205,26 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
             }
         }
 
-        // ===== Filter letter labels: above row 1 and below row 2 of input filter =====
-        // Input filter row 1: y=47 (slots 0-8), row 2: y=65 (slots 9-17)
-        // Shifted 1px to the left of filter slots, centered within 18px slot spacing
-        int filterX = this.leftPos + 79; // 1px left of slot x=80
-        int labelXOffset = (18 - FILTER_LABEL_WIDTH) / 2; // Center 16px label in 18px cell
-
-        // Row 1 labels: ABOVE the first filter row (same spacing as below row 2)
-        // Frame top at y=46, same 2px visual gap as bottom labels have from frame bottom
-        int row1LabelY = this.topPos + 46 - 1 - FILTER_LABEL_GAP - FILTER_LABEL_HEIGHT;
-        for (int col = 0; col < 9; col++) {
-            filterLabels[col] = new PatternCellWidget(
-                    filterX + col * 18 + labelXOffset, row1LabelY,
+        // ===== Filter letter labels: row 0 above first slot row, row r>0 below slot row r (like original) =====
+        // Original: row1 labels above y=47, row2 labels below second row (65+18=83 + gap)
+        int filterX = this.leftPos + 79;
+        int labelXOffset = (18 - FILTER_LABEL_WIDTH) / 2;
+        int n = menu.getInputFilterSlotCount();
+        filterLabels = new PatternCellWidget[n];
+        for (int i = 0; i < n; i++) {
+            int row = i / 9;
+            int col = i % 9;
+            // Row 0: above first slot row. Row r>0: below slot row r (bottom at 47 + (r+1)*18)
+            int labelY = row == 0
+                    ? this.topPos + 46 - 1 - FILTER_LABEL_GAP - FILTER_LABEL_HEIGHT
+                    : this.topPos + 47 + (row + 1) * 18 + FILTER_LABEL_GAP;
+            filterLabels[i] = new PatternCellWidget(
+                    filterX + col * 18 + labelXOffset, labelY,
                     FILTER_LABEL_WIDTH, FILTER_LABEL_HEIGHT,
-                    col,
+                    i,
                     this::onFilterLabelClick
             );
-            addRenderableWidget(filterLabels[col]);
-        }
-
-        // Row 2 labels: BELOW the second filter row
-        // Slot bottom at y=65+18=83, label top at y=83+gap
-        int row2LabelY = this.topPos + 65 + 18 + FILTER_LABEL_GAP;
-        for (int col = 0; col < 9; col++) {
-            int filterIndex = 9 + col;
-            filterLabels[filterIndex] = new PatternCellWidget(
-                    filterX + col * 18 + labelXOffset, row2LabelY,
-                    FILTER_LABEL_WIDTH, FILTER_LABEL_HEIGHT,
-                    filterIndex,
-                    this::onFilterLabelClick
-            );
-            addRenderableWidget(filterLabels[filterIndex]);
+            addRenderableWidget(filterLabels[i]);
         }
     }
 
@@ -359,16 +348,26 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
             }
         }
 
+        // Max letter = number of input filter slots (18 Normal = A-R, 36 Improved = A-Z + a-j, etc.)
+        int maxLetter = menu.getInputFilterSlotCount();
+        for (int row = 0; row < 3; row++) {
+            for (int col = 0; col < 3; col++) {
+                gridCells[row][col].setMaxLetter(maxLetter);
+            }
+        }
+        for (int i = 0; i < filterLabels.length; i++) {
+            filterLabels[i].setMaxLetter(maxLetter);
+        }
+
         // Update filter labels and their dynamic tooltips
-        for (int i = 0; i < 18; i++) {
+        int filterCount = menu.getInputFilterSlotCount();
+        for (int i = 0; i < filterCount && i < filterLabels.length; i++) {
             int letterValue = menu.getFilterLetter(i);
             filterLabels[i].setValue(letterValue);
 
             if (letterValue == 0) {
-                // Disabled: no tooltip
                 filterLabels[i].setTooltip(null);
             } else {
-                // Check if the corresponding ghost slot has an item
                 ItemStack filterItem = menu.getSlot(ImprovedPatternCrafterMenu.INPUT_FILTER_START + i).getItem();
                 if (filterItem.isEmpty()) {
                     // Wildcard: any item (excluding other specific filters)
@@ -414,6 +413,9 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
 
         // Draw dark overlay on disabled input filter slots (letter == 0)
         renderDisabledFilterOverlays(guiGraphics);
+
+        // Ghost items in input slots when empty but have mark-input filter (like Structure Placer)
+        renderMarkInputGhosts(guiGraphics);
 
         // Energy bar: only when machine has energy (capacity > 0; if either capacity or perCraft 0, both 0)
         if (this.menu.getMaxEnergyStored() > 0) {
@@ -465,10 +467,10 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
         int slotY0 = 211;
         int slotY1 = 229;
 
-        if (menu.getSlot(ImprovedPatternCrafterMenu.UPGRADE_START).getItem().isEmpty()) {
+        if (menu.getSlot(menu.getUpgradeStart()).getItem().isEmpty()) {
             renderUpgradeGhost(guiGraphics, UPGRADE_LOGIC_TEXTURE, slotX, slotY0);
         }
-        if (menu.getSlot(ImprovedPatternCrafterMenu.UPGRADE_START + 1).getItem().isEmpty()) {
+        if (menu.getSlot(menu.getUpgradeStart() + 1).getItem().isEmpty()) {
             renderUpgradeGhost(guiGraphics, UPGRADE_SPEED_TEXTURE, slotX, slotY1);
         }
     }
@@ -490,7 +492,7 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
      */
     private void renderDisabledFilterOverlays(GuiGraphics guiGraphics) {
         int overlayColor = 0xC0101010; // Dark semi-transparent
-        for (int i = 0; i < 18; i++) {
+        for (int i = 0; i < menu.getInputFilterSlotCount(); i++) {
             if (menu.getFilterLetter(i) == 0) {
                 int row = i / 9;
                 int col = i % 9;
@@ -500,6 +502,36 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
                 guiGraphics.fill(slotX, slotY, slotX + 16, slotY + 16, overlayColor);
             }
         }
+    }
+
+    /**
+     * Renders ghost items (semi-transparent) in the 27 input slots when the slot has a mark-input
+     * filter but is empty. Same structure as Structure Placer Machine renderGhostItems.
+     */
+    private void renderMarkInputGhosts(GuiGraphics guiGraphics) {
+        for (int slot = 0; slot < 27; slot++) {
+            if (menu.hasMarkInputFilter(slot)) {
+                net.minecraft.world.inventory.Slot guiSlot = menu.getSlot(menu.getInputStart() + slot);
+                if (guiSlot.getItem().isEmpty()) {
+                    ItemStack ghostFilter = menu.getMarkInputFilter(slot);
+                    if (!ghostFilter.isEmpty()) {
+                        renderMarkInputGhostItem(guiGraphics, ghostFilter, guiSlot.x, guiSlot.y);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Renders a single ghost item (semi-transparent) at the specified slot position.
+     * Same as Structure Placer Machine renderGhostItem.
+     */
+    private void renderMarkInputGhostItem(GuiGraphics guiGraphics, ItemStack itemStack, int x, int y) {
+        guiGraphics.pose().pushPose();
+        guiGraphics.pose().translate(this.leftPos + x, this.topPos + y, 0);
+        guiGraphics.renderItem(itemStack, 0, 0);
+        guiGraphics.fill(0, 0, 16, 16, 0x80000000); // 50% transparent black overlay
+        guiGraphics.pose().popPose();
     }
 
     /**

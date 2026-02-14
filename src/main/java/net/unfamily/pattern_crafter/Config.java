@@ -35,6 +35,9 @@ public class Config {
     public static final ModConfigSpec.IntValue NORMAL_MAX_SPEED_MODULES = BUILDER
             .comment("Max speed modules in upgrade slot; 0 = no upgrades (default: 0)")
             .defineInRange("maxSpeedModules", 0, 0, 64);
+    public static final ModConfigSpec.IntValue NORMAL_MAX_KEY_INPUTS = BUILDER
+            .comment("Max key inputs (letters A, B, ...) for pattern crafting; number of input filter slots (default: 18)")
+            .defineInRange("maxKeyInputs", 18, 1, 256);
 
     static {
         BUILDER.pop();
@@ -78,6 +81,9 @@ public class Config {
     public static final ModConfigSpec.DoubleValue SPEED_MULTIPLIER_ULTRA = BUILDER
             .comment("Crafting interval multiplier for ultra_module (default: 0.05)")
             .defineInRange("speedMultiplierUltra", 0.05, 0.01, 1.0);
+    public static final ModConfigSpec.IntValue IMPROVED_MAX_KEY_INPUTS = BUILDER
+            .comment("Max key inputs (letters A, B, ... up to Z and beyond) for pattern crafting; number of input filter slots (default: 36)")
+            .defineInRange("maxKeyInputs", 36, 1, 256);
 
     static {
         BUILDER.pop();

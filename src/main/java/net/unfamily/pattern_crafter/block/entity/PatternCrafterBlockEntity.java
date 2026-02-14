@@ -91,4 +91,13 @@ public class PatternCrafterBlockEntity extends ImprovedPatternCrafterBlockEntity
             return 0;
         }
     }
+
+    @Override
+    protected int getMaxKeyInputs() {
+        try {
+            return Math.max(1, Math.min(256, Config.NORMAL_MAX_KEY_INPUTS.get()));
+        } catch (Exception e) {
+            return 18;
+        }
+    }
 }

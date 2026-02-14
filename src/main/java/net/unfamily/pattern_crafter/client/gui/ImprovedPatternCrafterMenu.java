@@ -19,7 +19,7 @@ import net.unfamily.pattern_crafter.pattern.PatternData;
  * Menu/Container for the Improved Pattern Crafter.
  *
  * Slot layout (all coordinates are +1 from frame border = item render position):
- *   - Input filter ghost slots:  9x2 = 18 slots at (80, 47)
+ *   - Input filter ghost slots:  9 x N rows (N from BE getMaxKeyInputs: 18 or 36) at (80, 47)
  *   - Output filter ghost slots: 3x7 = 21 slots at (13, 65)
  *   - Upgrade slots:             1x2 = 2 slots  at (49, 211)  [manual only]
  *   - Output slots:              3x3 = 9 slots  at (258, 171) [extract only]
@@ -29,8 +29,7 @@ import net.unfamily.pattern_crafter.pattern.PatternData;
  */
 public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
 
-    // Slot counts
-    public static final int INPUT_FILTER_SLOTS = 18;    // 9x2
+    // Slot counts (input filter count is dynamic from BE)
     public static final int OUTPUT_FILTER_SLOTS = 21;   // 3x7
     public static final int UPGRADE_SLOTS = 2;          // 1x2
     public static final int OUTPUT_SLOTS = 9;           // 3x3
@@ -38,41 +37,50 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
     public static final int PLAYER_INV_SLOTS = 27;      // 9x3
     public static final int PLAYER_HOTBAR_SLOTS = 9;    // 9x1
 
-    // Slot index ranges
+    // Slot index ranges (INPUT_FILTER_END is dynamic)
     public static final int INPUT_FILTER_START = 0;
-    public static final int INPUT_FILTER_END = INPUT_FILTER_START + INPUT_FILTER_SLOTS;         // 18
-    public static final int OUTPUT_FILTER_START = INPUT_FILTER_END;
-    public static final int OUTPUT_FILTER_END = OUTPUT_FILTER_START + OUTPUT_FILTER_SLOTS;      // 39
-    public static final int GHOST_SLOTS_END = OUTPUT_FILTER_END;                                // 39
-    public static final int UPGRADE_START = GHOST_SLOTS_END;
-    public static final int UPGRADE_END = UPGRADE_START + UPGRADE_SLOTS;                        // 41
-    public static final int OUTPUT_START = UPGRADE_END;
-    public static final int OUTPUT_END = OUTPUT_START + OUTPUT_SLOTS;                           // 50
-    public static final int INPUT_START = OUTPUT_END;
-    public static final int INPUT_END = INPUT_START + INPUT_SLOTS;                              // 77
-    public static final int PLAYER_INV_START = INPUT_END;
-    public static final int PLAYER_INV_END = PLAYER_INV_START + PLAYER_INV_SLOTS;               // 104
-    public static final int PLAYER_HOTBAR_START = PLAYER_INV_END;
-    public static final int PLAYER_HOTBAR_END = PLAYER_HOTBAR_START + PLAYER_HOTBAR_SLOTS;      // 113
+    private final int inputFilterSlotCount; // from BE getMaxKeyInputs() (18 or 36)
 
-    // ContainerData indices for synced data
-    // [0]    currentPatternIndex
-    // [1]    totalPatterns
-    // [2-10] grid cells (9)
-    // [11-28] filter letters (18)
-    // [29]   energyStored
-    // [30]   maxEnergyStored
+    public int getInputFilterSlotCount() {
+        return inputFilterSlotCount;
+    }
+
+    public int getInputFilterEnd() {
+        return INPUT_FILTER_START + inputFilterSlotCount;
+    }
+
+    public int getOutputFilterStart() { return getInputFilterEnd(); }
+    public int getOutputFilterEnd() { return getOutputFilterStart() + OUTPUT_FILTER_SLOTS; }
+    public int getUpgradeStart() { return getOutputFilterEnd(); }
+    public int getUpgradeEnd() { return getUpgradeStart() + UPGRADE_SLOTS; }
+    public int getOutputStart() { return getUpgradeEnd(); }
+    public int getOutputEnd() { return getOutputStart() + OUTPUT_SLOTS; }
+    public int getInputStart() { return getOutputEnd(); }
+    public int getInputEnd() { return getInputStart() + INPUT_SLOTS; }
+    public int getPlayerInvStart() { return getInputEnd(); }
+    public int getPlayerInvEnd() { return getPlayerInvStart() + PLAYER_INV_SLOTS; }
+    public int getPlayerHotbarStart() { return getPlayerInvEnd(); }
+    public int getPlayerHotbarEnd() { return getPlayerHotbarStart() + PLAYER_HOTBAR_SLOTS; }
+
+    // ContainerData indices for synced data (energy etc. depend on inputFilterSlotCount)
     private static final int DATA_CURRENT_PATTERN = 0;
     private static final int DATA_TOTAL_PATTERNS = 1;
     private static final int DATA_GRID_START = 2;
     private static final int DATA_FILTER_LETTERS_START = 2 + PatternData.GRID_SIZE; // 11
-    private static final int DATA_ENERGY_STORED = DATA_FILTER_LETTERS_START + INPUT_FILTER_SLOTS; // 29
-    private static final int DATA_MAX_ENERGY = DATA_ENERGY_STORED + 1; // 30
-    private static final int DATA_CRAFTING_MODE = DATA_MAX_ENERGY + 1; // 31
-    private static final int DATA_REDSTONE_MODE = DATA_CRAFTING_MODE + 1; // 32
-    private static final int DATA_CRAFTING_TIMER = DATA_REDSTONE_MODE + 1; // 33
-    private static final int DATA_CRAFTING_INTERVAL = DATA_CRAFTING_TIMER + 1; // 34
-    private static final int CONTAINER_DATA_SIZE = DATA_CRAFTING_INTERVAL + 1; // 35
+
+    private int getDataEnergyStoredIndex() {
+        return DATA_FILTER_LETTERS_START + inputFilterSlotCount;
+    }
+
+    private int getContainerDataSize() {
+        return getDataEnergyStoredIndex() + 2 + 1 + 1 + 1 + 1 + 1; // energy, maxEnergy, mode, redstone, timer, interval
+    }
+
+    private int getDataMaxEnergyIndex() { return getDataEnergyStoredIndex() + 1; }
+    private int getDataCraftingModeIndex() { return getDataEnergyStoredIndex() + 2; }
+    private int getDataRedstoneModeIndex() { return getDataEnergyStoredIndex() + 3; }
+    private int getDataCraftingTimerIndex() { return getDataEnergyStoredIndex() + 4; }
+    private int getDataCraftingIntervalIndex() { return getDataEnergyStoredIndex() + 5; }
 
     private final ImprovedPatternCrafterBlockEntity blockEntity;
     private final ContainerData patternContainerData;
@@ -104,6 +112,7 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
 
         if (blockEntity instanceof ImprovedPatternCrafterBlockEntity pcbe) {
             this.blockEntity = pcbe;
+            this.inputFilterSlotCount = pcbe.getInputFilterHandler().getSlots();
             addInputFilterSlots(pcbe.getInputFilterHandler());
             addOutputFilterSlots(pcbe.getOutputFilterHandler());
             addUpgradeSlots(pcbe.getUpgradeHandler());
@@ -111,49 +120,50 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
             addInputSlots(pcbe.getInputHandler());
 
             if (isClientSide) {
-                // Client: SimpleContainerData receives synced values via set()
-                this.patternContainerData = new SimpleContainerData(CONTAINER_DATA_SIZE);
+                this.patternContainerData = new SimpleContainerData(getContainerDataSize());
             } else {
-                // Server: ContainerData reads live data from BlockEntity
+                final int dataEnergy = getDataEnergyStoredIndex();
+                final int dataMaxEnergy = getDataMaxEnergyIndex();
+                final int dataMode = getDataCraftingModeIndex();
+                final int dataRedstone = getDataRedstoneModeIndex();
+                final int dataTimer = getDataCraftingTimerIndex();
+                final int dataInterval = getDataCraftingIntervalIndex();
                 this.patternContainerData = new ContainerData() {
                     @Override
                     public int get(int index) {
                         if (index == DATA_CURRENT_PATTERN) return pcbe.getCurrentPatternIndex();
                         if (index == DATA_TOTAL_PATTERNS) return pcbe.getPatternCount();
-                        if (index == DATA_ENERGY_STORED) return pcbe.getEnergyStorage().getEnergyStored();
-                        if (index == DATA_MAX_ENERGY) return pcbe.getEnergyStorage().getMaxEnergyStored();
-                        if (index == DATA_CRAFTING_MODE) return pcbe.getCraftingMode();
-                        if (index == DATA_REDSTONE_MODE) return pcbe.getRedstoneMode();
-                        if (index == DATA_CRAFTING_TIMER) return pcbe.getCraftingTimer();
-                        if (index == DATA_CRAFTING_INTERVAL) return pcbe.getEffectiveCraftingInterval();
-                        if (index >= DATA_FILTER_LETTERS_START && index < DATA_ENERGY_STORED) {
+                        if (index == dataEnergy) return pcbe.getEnergyStorage().getEnergyStored();
+                        if (index == dataMaxEnergy) return pcbe.getEnergyStorage().getMaxEnergyStored();
+                        if (index == dataMode) return pcbe.getCraftingMode();
+                        if (index == dataRedstone) return pcbe.getRedstoneMode();
+                        if (index == dataTimer) return pcbe.getCraftingTimer();
+                        if (index == dataInterval) return pcbe.getEffectiveCraftingInterval();
+                        if (index >= DATA_FILTER_LETTERS_START && index < dataEnergy) {
                             return pcbe.getFilterLetter(index - DATA_FILTER_LETTERS_START);
                         }
-                        // Grid cells
                         PatternData pattern = pcbe.getCurrentPattern();
                         return pattern != null ? pattern.getCell(index - DATA_GRID_START) : 0;
                     }
 
                     @Override
-                    public void set(int index, int value) {
-                        // Server-side: data is set via packets, not via ContainerData sync
-                    }
+                    public void set(int index, int value) {}
 
                     @Override
                     public int getCount() {
-                        return CONTAINER_DATA_SIZE;
+                        return getContainerDataSize();
                     }
                 };
             }
         } else {
             this.blockEntity = null;
-            // Fallback with empty handlers
-            addInputFilterSlots(new ItemStackHandler(INPUT_FILTER_SLOTS));
+            this.inputFilterSlotCount = 18;
+            addInputFilterSlots(new ItemStackHandler(18));
             addOutputFilterSlots(new ItemStackHandler(OUTPUT_FILTER_SLOTS));
             addUpgradeSlots(new ItemStackHandler(UPGRADE_SLOTS));
             addOutputSlots(new ItemStackHandler(OUTPUT_SLOTS));
             addInputSlots(new ItemStackHandler(INPUT_SLOTS));
-            this.patternContainerData = new SimpleContainerData(CONTAINER_DATA_SIZE);
+            this.patternContainerData = new SimpleContainerData(getContainerDataSize());
         }
 
         addDataSlots(patternContainerData);
@@ -177,38 +187,38 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
     }
 
     /**
-     * Returns the letter assigned to an input filter slot (0=disabled, 1-18=A-R).
+     * Returns the letter assigned to an input filter slot (0=disabled, 1..N = letters).
      */
     public int getFilterLetter(int index) {
-        if (index < 0 || index >= INPUT_FILTER_SLOTS) return 0;
+        if (index < 0 || index >= inputFilterSlotCount) return 0;
         return patternContainerData.get(DATA_FILTER_LETTERS_START + index);
     }
 
     // ===== Energy Data Accessors =====
 
     public int getEnergyStored() {
-        return patternContainerData.get(DATA_ENERGY_STORED);
+        return patternContainerData.get(getDataEnergyStoredIndex());
     }
 
     public int getMaxEnergyStored() {
-        return patternContainerData.get(DATA_MAX_ENERGY);
+        return patternContainerData.get(getDataMaxEnergyIndex());
     }
 
     /** 0 = Shaped+Shapeless, 1 = Only Shaped, 2 = Only Shapeless */
     public int getCraftingMode() {
-        return patternContainerData.get(DATA_CRAFTING_MODE);
+        return patternContainerData.get(getDataCraftingModeIndex());
     }
 
     public int getRedstoneMode() {
-        return patternContainerData.get(DATA_REDSTONE_MODE);
+        return patternContainerData.get(getDataRedstoneModeIndex());
     }
 
     public int getCraftingTimer() {
-        return patternContainerData.get(DATA_CRAFTING_TIMER);
+        return patternContainerData.get(getDataCraftingTimerIndex());
     }
 
     public int getCraftingInterval() {
-        return patternContainerData.get(DATA_CRAFTING_INTERVAL);
+        return patternContainerData.get(getDataCraftingIntervalIndex());
     }
 
     // ===== Ghost Slot Click Handling =====
@@ -222,7 +232,7 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
     @Override
     public void clicked(int slotId, int button, ClickType clickType, Player player) {
         // Input filter ghost slots: check if letter is assigned before allowing interaction
-        if (slotId >= INPUT_FILTER_START && slotId < INPUT_FILTER_END) {
+        if (slotId >= INPUT_FILTER_START && slotId < getInputFilterEnd()) {
             int filterIndex = slotId - INPUT_FILTER_START;
             // Block interaction if the filter slot's letter is empty (disabled)
             if (blockEntity != null && blockEntity.getFilterLetter(filterIndex) == 0) {
@@ -237,7 +247,7 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
             return;
         }
         // Output filter ghost slots: always allowed
-        if (slotId >= OUTPUT_FILTER_START && slotId < OUTPUT_FILTER_END) {
+        if (slotId >= getOutputFilterStart() && slotId < getOutputFilterEnd()) {
             ItemStack carried = getCarried();
             ItemStack toSet = carried.isEmpty() ? ItemStack.EMPTY : carried.copyWithCount(1);
             this.slots.get(slotId).set(toSet);
@@ -251,13 +261,13 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
 
     // ===== Slot Setup Methods =====
 
-    // Input filter: 9 columns x 2 rows at (80, 47)
+    // Input filter: 9 columns x N rows at (80, 47), N = handler.getSlots() / 9
     private void addInputFilterSlots(ItemStackHandler handler) {
-        for (int row = 0; row < 2; row++) {
-            for (int col = 0; col < 9; col++) {
-                this.addSlot(new GhostSlot(handler, row * 9 + col,
-                        80 + col * 18, 47 + row * 18));
-            }
+        int slots = handler.getSlots();
+        for (int i = 0; i < slots; i++) {
+            int row = i / 9;
+            int col = i % 9;
+            this.addSlot(new GhostSlot(handler, i, 80 + col * 18, 47 + row * 18));
         }
     }
 
@@ -328,32 +338,32 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
         }
 
         // Ghost slots: no shift-click behavior
-        if (index < GHOST_SLOTS_END) {
+        if (index < getOutputFilterEnd()) {
             return result;
         }
 
         ItemStack stackInSlot = slot.getItem();
         result = stackInSlot.copy();
 
-        if (index < PLAYER_INV_START) {
+        if (index < getPlayerInvStart()) {
             // From machine slots (upgrade/output/input) -> to player inventory/hotbar
-            if (!moveItemStackTo(stackInSlot, PLAYER_INV_START, PLAYER_HOTBAR_END, true)) {
+            if (!moveItemStackTo(stackInSlot, getPlayerInvStart(), getPlayerHotbarEnd(), true)) {
                 return ItemStack.EMPTY;
             }
-        } else if (index < PLAYER_HOTBAR_START) {
+        } else if (index < getPlayerHotbarStart()) {
             // From player inventory -> try machine input first, then upgrade, then hotbar
-            if (!moveItemStackTo(stackInSlot, INPUT_START, INPUT_END, false)) {
-                if (!moveItemStackTo(stackInSlot, UPGRADE_START, UPGRADE_END, false)) {
-                    if (!moveItemStackTo(stackInSlot, PLAYER_HOTBAR_START, PLAYER_HOTBAR_END, false)) {
+            if (!moveItemStackTo(stackInSlot, getInputStart(), getInputEnd(), false)) {
+                if (!moveItemStackTo(stackInSlot, getUpgradeStart(), getUpgradeEnd(), false)) {
+                    if (!moveItemStackTo(stackInSlot, getPlayerHotbarStart(), getPlayerHotbarEnd(), false)) {
                         return ItemStack.EMPTY;
                     }
                 }
             }
         } else {
             // From hotbar -> try machine input first, then upgrade, then player inventory
-            if (!moveItemStackTo(stackInSlot, INPUT_START, INPUT_END, false)) {
-                if (!moveItemStackTo(stackInSlot, UPGRADE_START, UPGRADE_END, false)) {
-                    if (!moveItemStackTo(stackInSlot, PLAYER_INV_START, PLAYER_INV_END, false)) {
+            if (!moveItemStackTo(stackInSlot, getInputStart(), getInputEnd(), false)) {
+                if (!moveItemStackTo(stackInSlot, getUpgradeStart(), getUpgradeEnd(), false)) {
+                    if (!moveItemStackTo(stackInSlot, getPlayerInvStart(), getPlayerInvEnd(), false)) {
                         return ItemStack.EMPTY;
                     }
                 }
@@ -382,5 +392,15 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
 
     public ImprovedPatternCrafterBlockEntity getBlockEntity() {
         return blockEntity;
+    }
+
+    /** Slot-dedication (mark input) filter for the given input slot index (0..26). For GUI ghost display. */
+    public ItemStack getMarkInputFilter(int slot) {
+        return blockEntity != null ? blockEntity.getMarkInputFilter(slot) : ItemStack.EMPTY;
+    }
+
+    /** True if the given input slot has a mark-input filter. */
+    public boolean hasMarkInputFilter(int slot) {
+        return blockEntity != null && blockEntity.hasMarkInputFilter(slot);
     }
 }

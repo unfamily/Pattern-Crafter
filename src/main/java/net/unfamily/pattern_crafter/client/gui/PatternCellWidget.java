@@ -18,6 +18,7 @@ import java.util.function.Consumer;
  */
 public class PatternCellWidget extends AbstractWidget {
     private int value = PatternData.EMPTY;
+    private int maxLetter = PatternData.MAX_LETTER; // from BE getMaxKeyInputs(); cycle uses this
     private final int cellIndex;
     private final Consumer<PatternCellWidget> onPress;
 
@@ -39,19 +40,23 @@ public class PatternCellWidget extends AbstractWidget {
         this.value = value;
     }
 
+    public void setMaxLetter(int maxLetter) {
+        this.maxLetter = Math.max(1, Math.min(PatternData.MAX_LETTER, maxLetter));
+    }
+
     /**
-     * Cycles the value forward: empty -> A -> B -> ... -> R -> empty
+     * Cycles the value forward: empty -> 1 -> ... -> maxLetter -> empty
      */
     public int cycleForward() {
-        value = value >= PatternData.MAX_LETTER ? PatternData.EMPTY : value + 1;
+        value = value >= maxLetter ? PatternData.EMPTY : value + 1;
         return value;
     }
 
     /**
-     * Cycles the value backward: empty -> R -> Q -> ... -> A -> empty
+     * Cycles the value backward: empty -> maxLetter -> ... -> 1 -> empty
      */
     public int cycleBackward() {
-        value = value <= PatternData.EMPTY ? PatternData.MAX_LETTER : value - 1;
+        value = value <= PatternData.EMPTY ? maxLetter : value - 1;
         return value;
     }
 
@@ -94,16 +99,18 @@ public class PatternCellWidget extends AbstractWidget {
         guiGraphics.fill(getX(), getY(), getX() + 1, getY() + height, borderColor);                // left
         guiGraphics.fill(getX() + width - 1, getY(), getX() + width, getY() + height, borderColor); // right
 
-        // Draw letter centered
+        // Draw letter (or value) centered; 1-26 = A-Z, 27+ = number string
         if (value > PatternData.EMPTY) {
-            char letter = PatternData.valueToChar(value);
+            String label = PatternData.letterValueToDisplayString(value);
             int textColor = PatternColors.getTextColor(value);
-            guiGraphics.drawCenteredString(
+            int labelW = Minecraft.getInstance().font.width(label);
+            guiGraphics.drawString(
                     Minecraft.getInstance().font,
-                    String.valueOf(letter),
-                    getX() + width / 2,
+                    label,
+                    getX() + (width - labelW) / 2,
                     getY() + (height - 8) / 2,
-                    textColor
+                    textColor,
+                    false
             );
         }
     }
