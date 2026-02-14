@@ -6,6 +6,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import net.unfamily.pattern_crafter.PatternCrafter;
 import net.unfamily.pattern_crafter.network.packet.CraftingModeSwitchC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.FilterLetterUpdateC2SPacket;
+import net.unfamily.pattern_crafter.network.packet.MarkInputC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.PatternCellUpdateC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.PatternSwitchC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.RedstoneModeC2SPacket;
@@ -52,6 +53,13 @@ public class ModMessages {
                 RedstoneModeC2SPacket.TYPE,
                 RedstoneModeC2SPacket.STREAM_CODEC,
                 RedstoneModeC2SPacket::handle
+        );
+
+        // Mark Input (set/clear input filters, like Structure Placer Filter button)
+        registrar.playToServer(
+                MarkInputC2SPacket.TYPE,
+                MarkInputC2SPacket.STREAM_CODEC,
+                MarkInputC2SPacket::handle
         );
     }
 }

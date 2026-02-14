@@ -16,5 +16,9 @@
   "gui.pattern_crafter.redstone_mode.2":"Redstone: alto",
   "gui.pattern_crafter.redstone_mode.3":"Redstone: impulso",
   "gui.pattern_crafter.redstone_mode.4":"Redstone: disattivato",
-  "gui.pattern_crafter.save_pattern":"Salva"
+  "gui.pattern_crafter.save_pattern":"Salva",
+  "gui.pattern_crafter.mark_input":"Segna input",
+  "gui.pattern_crafter.mark_input.tooltip.line1":"§7Click per salvare i filtri dall'input corrente",
+  "gui.pattern_crafter.mark_input.tooltip.line2":"§7Shift+Click per cancellare tutti i filtri",
+  "gui.pattern_crafter.mark_input.tooltip.line3":"§7Ctrl/Alt+Click per cancellare i filtri senza item corrispondenti"
 }

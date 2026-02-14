@@ -15,8 +15,12 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import net.unfamily.pattern_crafter.PatternCrafter;
 import net.unfamily.pattern_crafter.network.packet.CraftingModeSwitchC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.FilterLetterUpdateC2SPacket;
+import net.unfamily.pattern_crafter.network.packet.MarkInputC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.PatternCellUpdateC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.PatternSwitchC2SPacket;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Screen for the Improved Pattern Crafter.
@@ -76,6 +80,9 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
     private int redstoneButtonX;
     private int redstoneButtonY;
 
+    // Mark Input button (above upgrades, same behaviour as Structure Placer Filter)
+    private Button markInputButton;
+
     // Crafting mode button (above pattern nav)
     private Button craftingModeButton;
 
@@ -113,6 +120,19 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
                 .bounds(this.leftPos + CLOSE_BUTTON_X, this.topPos + CLOSE_BUTTON_Y, CLOSE_BUTTON_SIZE, CLOSE_BUTTON_SIZE)
                 .build();
         addRenderableWidget(closeButton);
+
+        // Mark Input button: above upgrade slots (same logic as Structure Placer "Filter" / Set Inventory)
+        int upgradeColX = 49;
+        int upgradeFirstY = 211;
+        int markInputButtonW = 34;
+        int markInputButtonH = 18;
+        int markInputButtonY = upgradeFirstY - markInputButtonH - 4;
+        markInputButton = Button.builder(
+                        Component.translatable("gui.pattern_crafter.mark_input"),
+                        btn -> onMarkInputPressed())
+                .bounds(this.leftPos + upgradeColX, this.topPos + markInputButtonY, markInputButtonW, markInputButtonH)
+                .build();
+        addRenderableWidget(markInputButton);
 
         // Redstone mode button - left of energy bar (same graphics as iskandert_utilities; drawn in render, click in mouseClicked)
         int energyBarX = 49 - ENERGY_BAR_WIDTH - 4;
@@ -271,6 +291,17 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
         }
     }
 
+    private void onMarkInputPressed() {
+        if (menu.getBlockEntity() == null) return;
+        int mode = MarkInputC2SPacket.MODE_NORMAL;
+        if (Screen.hasShiftDown()) {
+            mode = MarkInputC2SPacket.MODE_SHIFT;
+        } else if (Screen.hasControlDown() || Screen.hasAltDown()) {
+            mode = MarkInputC2SPacket.MODE_CTRL;
+        }
+        PacketDistributor.sendToServer(new MarkInputC2SPacket(menu.getBlockEntity().getBlockPos(), mode));
+    }
+
     private void onGridCellClick(PatternCellWidget widget) {
         // Store edit in pending; only sent to server when Save is clicked (or when switching pattern)
         int patternIndex = menu.getCurrentPatternIndex();
@@ -401,6 +432,9 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
 
         // Redstone button tooltip
         renderRedstoneTooltip(guiGraphics, mouseX, mouseY);
+
+        // Mark Input button tooltip (same style as Structure Placer set_inventory)
+        renderMarkInputTooltip(guiGraphics, mouseX, mouseY);
 
         this.renderTooltip(guiGraphics, mouseX, mouseY);
     }
@@ -609,6 +643,16 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
             guiGraphics.renderTooltip(this.font,
                     Component.translatable("gui.pattern_crafter.redstone_mode." + menu.getRedstoneMode()),
                     mouseX, mouseY);
+        }
+    }
+
+    private void renderMarkInputTooltip(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        if (markInputButton != null && markInputButton.isHovered()) {
+            List<Component> lines = new ArrayList<>();
+            lines.add(Component.translatable("gui.pattern_crafter.mark_input.tooltip.line1"));
+            lines.add(Component.translatable("gui.pattern_crafter.mark_input.tooltip.line2"));
+            lines.add(Component.translatable("gui.pattern_crafter.mark_input.tooltip.line3"));
+            guiGraphics.renderComponentTooltip(this.font, lines, mouseX, mouseY);
         }
     }
 

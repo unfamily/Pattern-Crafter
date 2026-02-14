@@ -28,9 +28,11 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * BlockEntity for the Improved Pattern Crafter.
@@ -383,6 +385,49 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
         return false;
     }
 
+    /**
+     * Copy current machine input slots (0-17) to input filter ghosts and assign letters A-R.
+     * Same behaviour as Structure Placer "Filter" / Set Inventory (normal click).
+     */
+    public void setInputFilters() {
+        for (int slot = 0; slot < inputFilterHandler.getSlots(); slot++) {
+            ItemStack currentStack = inputHandler.getStackInSlot(slot);
+            if (!currentStack.isEmpty()) {
+                ItemStack filter = currentStack.copyWithCount(1);
+                inputFilterHandler.setStackInSlot(slot, filter);
+                setFilterLetter(slot, slot + 1); // A=1 .. R=18
+            } else {
+                inputFilterHandler.setStackInSlot(slot, ItemStack.EMPTY);
+                setFilterLetter(slot, 0);
+            }
+        }
+        setChanged();
+    }
+
+    /** Clear all input filter ghosts and letters (Shift+Click on Mark Input). */
+    public void clearAllInputFilters() {
+        for (int i = 0; i < inputFilterHandler.getSlots(); i++) {
+            inputFilterHandler.setStackInSlot(i, ItemStack.EMPTY);
+            setFilterLetter(i, 0);
+        }
+        setChanged();
+    }
+
+    /** Clear input filter slots that don't have a matching item in the corresponding input slot (Ctrl/Alt+Click). */
+    public void clearEmptyInputFilters() {
+        for (int slot = 0; slot < inputFilterHandler.getSlots(); slot++) {
+            ItemStack filter = inputFilterHandler.getStackInSlot(slot);
+            if (!filter.isEmpty()) {
+                ItemStack currentStack = inputHandler.getStackInSlot(slot);
+                if (currentStack.isEmpty() || !ItemStack.isSameItemSameComponents(currentStack, filter)) {
+                    inputFilterHandler.setStackInSlot(slot, ItemStack.EMPTY);
+                    setFilterLetter(slot, 0);
+                }
+            }
+        }
+        setChanged();
+    }
+
     // ===== Pattern System =====
 
     public int getCurrentPatternIndex() {
@@ -489,8 +534,9 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
     }
 
     /**
-     * Attempts to craft by cycling through all patterns in round-robin order.
-     * For each pattern, tries different item combinations if a result is blacklisted.
+     * Attempts to craft: for each input slot (0, 1, 2, ...) try all patterns in sequence.
+     * Only when all patterns have been tried for the current slot do we move to the next slot.
+     * Ensures a valid key in filters (non-empty pattern) before trying.
      */
     private void attemptCraft() {
         if (level == null || level.isClientSide()) return;
@@ -498,26 +544,34 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
         int totalPatterns = getEffectivePatternCount();
         if (totalPatterns == 0) return;
 
-        // Clamp round-robin index to current effective pattern count
+        int totalSlots = inputHandler.getSlots();
         craftingPatternIndex = craftingPatternIndex % totalPatterns;
 
-        // Try all patterns in round-robin, starting from the next one
-        for (int patternAttempt = 0; patternAttempt < totalPatterns; patternAttempt++) {
-            craftingPatternIndex = (craftingPatternIndex + 1) % totalPatterns;
-            PatternData pattern = patterns.get(craftingPatternIndex);
-            if (isPatternEmpty(pattern)) continue;
+        // Outer loop: input slots (0, 1, 2, ...)
+        for (int prioritySlot = 0; prioritySlot < totalSlots; prioritySlot++) {
+            // Inner loop: all patterns for this slot
+            for (int patternAttempt = 0; patternAttempt < totalPatterns; patternAttempt++) {
+                int patternIndex = (craftingPatternIndex + patternAttempt) % totalPatterns;
+                PatternData pattern = patterns.get(patternIndex);
+                if (isPatternEmpty(pattern) || !hasValidFilterKey(pattern)) continue;
 
-            if (tryCraftPattern(pattern)) return; // Success!
+                if (tryCraftPattern(pattern, prioritySlot)) {
+                    craftingPatternIndex = (patternIndex + 1) % totalPatterns;
+                    return; // Success!
+                }
+            }
         }
     }
 
     /**
-     * Tries to craft using a specific pattern.
+     * Tries to craft using a specific pattern, preferring the given input slot when resolving items.
      * If a result is blacklisted or no valid recipe is found, excludes the item types
      * that led to the failure and retries with different items from input.
+     * @param pattern the pattern to use
+     * @param prioritySlot input slot to try first when resolving the grid (then slot+1, slot+2, ...)
      * @return true if crafting succeeded
      */
-    private boolean tryCraftPattern(PatternData pattern) {
+    private boolean tryCraftPattern(PatternData pattern, int prioritySlot) {
         // Base exclusion: specific filter items (for wildcard matching)
         List<ItemStack> specificItems = collectSpecificFilterItems();
         // Additional exclusions from blacklisted results (grows on each retry)
@@ -558,16 +612,16 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
                 if (letterItemDecision.containsKey(letterValue)) {
                     // Already decided which item type for this letter - find more of the same
                     ItemStack decidedItem = letterItemDecision.get(letterValue);
-                    foundSlot = findExactItem(decidedItem, availableCounts);
+                    foundSlot = findExactItem(decidedItem, availableCounts, prioritySlot);
                 } else {
                     // First cell with this letter - pick from this letter's filter, or wildcard if unassigned
                     List<ItemStack> acceptedItems = getAcceptedItemsForLetter(letterValue);
 
                     if (acceptedItems.isEmpty()) {
                         // Letter has no filter assigned: accept any item NOT assigned by other filter slots
-                        foundSlot = findWildcardItem(wildcardExclusions, availableCounts);
+                        foundSlot = findWildcardItem(wildcardExclusions, availableCounts, prioritySlot);
                     } else {
-                        foundSlot = findSpecificItem(acceptedItems, availableCounts, craftExclusions);
+                        foundSlot = findSpecificItem(acceptedItems, availableCounts, craftExclusions, prioritySlot);
                     }
 
                     // Commit this item type for all cells with this letter
@@ -588,7 +642,11 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
             }
 
             if (resolutionFailed) {
-                // Not enough items of this type - exclude decided items and retry
+                // No items found for this pattern (e.g. first cell has no valid slot): skip retries and try next pattern
+                if (letterItemDecision.isEmpty()) {
+                    return false;
+                }
+                // Exclude decided items and retry with different item choices
                 for (ItemStack decided : letterItemDecision.values()) {
                     addDistinctItems(craftExclusions, List.of(decided));
                 }
@@ -703,6 +761,18 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
         return true;
     }
 
+    /** Returns true if the pattern has at least one letter that has a filter (key) assigned. */
+    private boolean hasValidFilterKey(PatternData pattern) {
+        Set<Integer> lettersSeen = new HashSet<>();
+        for (int i = 0; i < PatternData.GRID_SIZE; i++) {
+            int letter = pattern.getCell(i);
+            if (letter != PatternData.EMPTY && lettersSeen.add(letter) && !getAcceptedItemsForLetter(letter).isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Collects all specific (non-wildcard) items from the input filter.
      * These are items in ghost slots that have a letter assigned.
@@ -749,12 +819,14 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
     }
 
     /**
-     * Finds an exact item match in the inputHandler.
+     * Finds an exact item match in the inputHandler, starting from the given slot (then wrapping).
      * Used when a letter's item type has already been decided.
      * @return slot index, or -1 if not found
      */
-    private int findExactItem(ItemStack target, int[] availableCounts) {
-        for (int slot = 0; slot < inputHandler.getSlots(); slot++) {
+    private int findExactItem(ItemStack target, int[] availableCounts, int startSlot) {
+        int n = inputHandler.getSlots();
+        for (int i = 0; i < n; i++) {
+            int slot = (startSlot + i) % n;
             if (availableCounts[slot] <= 0) continue;
             ItemStack slotItem = inputHandler.getStackInSlot(slot);
             if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, target)) {
@@ -765,13 +837,15 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
     }
 
     /**
-     * Finds an item in the inputHandler that matches any of the accepted items.
+     * Finds an item in the inputHandler that matches any of the accepted items, starting from startSlot.
      * Skips slots with no available items left, and items in the craft exclusion list.
      * @return slot index, or -1 if not found
      */
     private int findSpecificItem(List<ItemStack> acceptedItems, int[] availableCounts,
-                                 List<ItemStack> craftExclusions) {
-        for (int slot = 0; slot < inputHandler.getSlots(); slot++) {
+                                 List<ItemStack> craftExclusions, int startSlot) {
+        int n = inputHandler.getSlots();
+        for (int i = 0; i < n; i++) {
+            int slot = (startSlot + i) % n;
             if (availableCounts[slot] <= 0) continue;
             ItemStack slotItem = inputHandler.getStackInSlot(slot);
             if (slotItem.isEmpty()) continue;
@@ -787,13 +861,15 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
     }
 
     /**
-     * Finds any item in the inputHandler that is NOT in the exclusion list.
+     * Finds any item in the inputHandler that is NOT in the exclusion list, starting from startSlot.
      * Used for wildcard letter matching: "any item except specifically assigned ones
      * and items that led to blacklisted results".
      * @return slot index, or -1 if not found
      */
-    private int findWildcardItem(List<ItemStack> excludedItems, int[] availableCounts) {
-        for (int slot = 0; slot < inputHandler.getSlots(); slot++) {
+    private int findWildcardItem(List<ItemStack> excludedItems, int[] availableCounts, int startSlot) {
+        int n = inputHandler.getSlots();
+        for (int i = 0; i < n; i++) {
+            int slot = (startSlot + i) % n;
             if (availableCounts[slot] <= 0) continue;
             ItemStack slotItem = inputHandler.getStackInSlot(slot);
             if (slotItem.isEmpty()) continue;
