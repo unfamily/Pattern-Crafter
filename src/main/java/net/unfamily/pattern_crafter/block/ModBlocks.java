@@ -14,7 +14,7 @@ public class ModBlocks {
     private static final BlockBehaviour.Properties MACHINE_PROPERTIES = BlockBehaviour.Properties.of()
             .mapColor(MapColor.METAL)
             .strength(3.0f, 6.0f)
-            .sound(SoundType.METAL)
+            .sound(SoundType.STONE)
             .requiresCorrectToolForDrops();
 
     public static final DeferredBlock<ImprovedPatternCrafterBlock> IMPROVED_PATTERN_CRAFTER = BLOCKS.register("improved_pattern_crafter",

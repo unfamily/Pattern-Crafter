@@ -1,0 +1,23 @@
+{
+    "type": "minecraft:crafting_shaped",
+    "pattern": [
+      "ABA",
+      "BCB",
+      "ABA"
+    ],
+    "key": {
+      "A": {
+        "tag": "c:gems/quartz"
+      },
+      "B": {
+        "tag": "c:gems/lapis"
+      },
+      "C": {
+        "item": "pattern_crafter:pattern_crafter"
+      }
+    },
+    "result": {
+      "id": "pattern_crafter:improved_pattern_crafter",
+      "count": 1
+    }
+  } 
