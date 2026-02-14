@@ -39,14 +39,31 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
 
     // Slot index ranges (INPUT_FILTER_END is dynamic)
     public static final int INPUT_FILTER_START = 0;
-    private final int inputFilterSlotCount; // from BE getMaxKeyInputs() (18 or 36)
+    private final int inputFilterSlotCount; // total in BE (18 or 36)
+    /** When > 18 we show 18 at a time (paginated); this is how many slots are in the menu. */
+    private final int inputFilterMenuSlotCount;
+    /** When paginated, view over BE handler so menu slots 0–17 show BE slots [offset..offset+17]. */
+    private final InputFilterViewHandler inputFilterViewHandler;
 
     public int getInputFilterSlotCount() {
         return inputFilterSlotCount;
     }
 
+    public int getInputFilterMenuSlotCount() {
+        return inputFilterMenuSlotCount;
+    }
+
+    public InputFilterViewHandler getInputFilterViewHandler() {
+        return inputFilterViewHandler;
+    }
+
+    /** Call from screen when page changes (paginated only). */
+    public void setInputFilterViewOffset(int offset) {
+        if (inputFilterViewHandler != null) inputFilterViewHandler.setOffset(offset);
+    }
+
     public int getInputFilterEnd() {
-        return INPUT_FILTER_START + inputFilterSlotCount;
+        return INPUT_FILTER_START + inputFilterMenuSlotCount;
     }
 
     public int getOutputFilterStart() { return getInputFilterEnd(); }
@@ -73,7 +90,7 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
     }
 
     private int getContainerDataSize() {
-        return getDataEnergyStoredIndex() + 2 + 1 + 1 + 1 + 1 + 1; // energy, maxEnergy, mode, redstone, timer, interval
+        return getDataFilterPageIndex() + 1; // energy, maxEnergy, mode, redstone, timer, interval, filterPage
     }
 
     private int getDataMaxEnergyIndex() { return getDataEnergyStoredIndex() + 1; }
@@ -81,6 +98,7 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
     private int getDataRedstoneModeIndex() { return getDataEnergyStoredIndex() + 3; }
     private int getDataCraftingTimerIndex() { return getDataEnergyStoredIndex() + 4; }
     private int getDataCraftingIntervalIndex() { return getDataEnergyStoredIndex() + 5; }
+    private int getDataFilterPageIndex() { return getDataCraftingIntervalIndex() + 1; }
 
     private final ImprovedPatternCrafterBlockEntity blockEntity;
     private final ContainerData patternContainerData;
@@ -113,7 +131,16 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
         if (blockEntity instanceof ImprovedPatternCrafterBlockEntity pcbe) {
             this.blockEntity = pcbe;
             this.inputFilterSlotCount = pcbe.getInputFilterHandler().getSlots();
-            addInputFilterSlots(pcbe.getInputFilterHandler());
+            if (this.inputFilterSlotCount > 18) {
+                this.inputFilterMenuSlotCount = 18;
+                this.inputFilterViewHandler = new InputFilterViewHandler(pcbe.getInputFilterHandler());
+                this.inputFilterViewHandler.setOffset(pcbe.getGuiFilterPage() * 18);
+                addInputFilterSlots(this.inputFilterViewHandler);
+            } else {
+                this.inputFilterMenuSlotCount = this.inputFilterSlotCount;
+                this.inputFilterViewHandler = null;
+                addInputFilterSlots(pcbe.getInputFilterHandler());
+            }
             addOutputFilterSlots(pcbe.getOutputFilterHandler());
             addUpgradeSlots(pcbe.getUpgradeHandler());
             addOutputSlots(pcbe.getOutputHandler());
@@ -128,6 +155,7 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
                 final int dataRedstone = getDataRedstoneModeIndex();
                 final int dataTimer = getDataCraftingTimerIndex();
                 final int dataInterval = getDataCraftingIntervalIndex();
+                final int dataFilterPage = getDataFilterPageIndex();
                 this.patternContainerData = new ContainerData() {
                     @Override
                     public int get(int index) {
@@ -139,6 +167,7 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
                         if (index == dataRedstone) return pcbe.getRedstoneMode();
                         if (index == dataTimer) return pcbe.getCraftingTimer();
                         if (index == dataInterval) return pcbe.getEffectiveCraftingInterval();
+                        if (index == dataFilterPage) return pcbe.getGuiFilterPage();
                         if (index >= DATA_FILTER_LETTERS_START && index < dataEnergy) {
                             return pcbe.getFilterLetter(index - DATA_FILTER_LETTERS_START);
                         }
@@ -158,6 +187,8 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
         } else {
             this.blockEntity = null;
             this.inputFilterSlotCount = 18;
+            this.inputFilterMenuSlotCount = 18;
+            this.inputFilterViewHandler = null;
             addInputFilterSlots(new ItemStackHandler(18));
             addOutputFilterSlots(new ItemStackHandler(OUTPUT_FILTER_SLOTS));
             addUpgradeSlots(new ItemStackHandler(UPGRADE_SLOTS));
@@ -221,6 +252,11 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
         return patternContainerData.get(getDataCraftingIntervalIndex());
     }
 
+    /** Current filter page (0-based) synced from server; only meaningful when inputFilterSlotCount > 18. */
+    public int getSyncedFilterPage() {
+        return patternContainerData.get(getDataFilterPageIndex());
+    }
+
     // ===== Ghost Slot Click Handling =====
 
     /**
@@ -233,8 +269,11 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
     public void clicked(int slotId, int button, ClickType clickType, Player player) {
         // Input filter ghost slots: check if letter is assigned before allowing interaction
         if (slotId >= INPUT_FILTER_START && slotId < getInputFilterEnd()) {
-            int filterIndex = slotId - INPUT_FILTER_START;
-            // Block interaction if the filter slot's letter is empty (disabled)
+            int localIndex = slotId - INPUT_FILTER_START;
+            // When paginated, menu slot 0-17 maps to BE slots (offset..offset+17); use real BE index for letter check
+            int filterIndex = (inputFilterViewHandler != null)
+                    ? inputFilterViewHandler.getOffset() + localIndex
+                    : localIndex;
             if (blockEntity != null && blockEntity.getFilterLetter(filterIndex) == 0) {
                 return;
             }
@@ -261,8 +300,8 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
 
     // ===== Slot Setup Methods =====
 
-    // Input filter: 9 columns x N rows at (80, 47), N = handler.getSlots() / 9
-    private void addInputFilterSlots(ItemStackHandler handler) {
+    // Input filter: 9 columns x N rows at (80, 47), N = handler.getSlots()
+    private void addInputFilterSlots(net.neoforged.neoforge.items.IItemHandler handler) {
         int slots = handler.getSlots();
         for (int i = 0; i < slots; i++) {
             int row = i / 9;

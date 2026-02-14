@@ -7,7 +7,9 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.world.Containers;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingInput;
@@ -124,6 +126,17 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
     private static final int PULSE_IGNORE_INTERVAL = 10;
     /** In PULSE mode: one craft is scheduled and will run after the normal crafting interval (not instant). */
     private boolean pulseCraftPending = false;
+
+    /** Current input filter page when GUI is paginated (0-based). Synced to client via ContainerData; not persisted. */
+    private int guiFilterPage = 0;
+
+    public int getGuiFilterPage() {
+        return guiFilterPage;
+    }
+
+    public void setGuiFilterPage(int page) {
+        this.guiFilterPage = Math.max(0, page);
+    }
 
     /**
      * Combined handler for automation (hoppers, tubes, etc.).
@@ -1022,14 +1035,25 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
-        tag.put("inputFilter", inputFilterHandler.serializeNBT(registries));
+        // Save input filter slots as item+letter per slot to reduce desync (one atomic unit per slot)
+        ListTag inputFilterSlotsTag = new ListTag();
+        int filterSlots = inputFilterHandler.getSlots();
+        for (int i = 0; i < filterSlots; i++) {
+            CompoundTag slotTag = new CompoundTag();
+            ItemStack stack = inputFilterHandler.getStackInSlot(i);
+            if (!stack.isEmpty()) {
+                ItemStack.OPTIONAL_CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE), stack)
+                        .result().ifPresent(nbt -> slotTag.put("item", (CompoundTag) nbt));
+            }
+            slotTag.putInt("letter", filterLetters[i]);
+            inputFilterSlotsTag.add(slotTag);
+        }
+        tag.put("inputFilterSlots", inputFilterSlotsTag);
+
         tag.put("outputFilter", outputFilterHandler.serializeNBT(registries));
         tag.put("upgrades", upgradeHandler.serializeNBT(registries));
         tag.put("output", outputHandler.serializeNBT(registries));
         tag.put("input", inputHandler.serializeNBT(registries));
-
-        // Save filter letters
-        tag.putIntArray("filterLetters", filterLetters.clone());
 
         // Save mark input (slot dedication) filters, same format as iskandert_utilities ghostFilters
         CompoundTag markInputTag = new CompoundTag();
@@ -1067,8 +1091,29 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        if (tag.contains("inputFilter")) {
-            inputFilterHandler.deserializeNBT(registries, tag.getCompound("inputFilter"));
+        // Load input filter slots (item+letter together per slot); fallback to legacy separate tags
+        if (tag.contains("inputFilterSlots", Tag.TAG_LIST)) {
+            ListTag inputFilterSlotsTag = tag.getList("inputFilterSlots", Tag.TAG_COMPOUND);
+            int n = Math.min(inputFilterSlotsTag.size(), Math.min(inputFilterHandler.getSlots(), filterLetters.length));
+            for (int i = 0; i < n; i++) {
+                CompoundTag slotTag = inputFilterSlotsTag.getCompound(i);
+                ItemStack stack = ItemStack.OPTIONAL_CODEC.parse(
+                                registries.createSerializationContext(NbtOps.INSTANCE),
+                                slotTag.get("item"))
+                        .result().orElse(ItemStack.EMPTY);
+                inputFilterHandler.setStackInSlot(i, stack);
+                if (slotTag.contains("letter")) {
+                    filterLetters[i] = slotTag.getInt("letter");
+                }
+            }
+        } else {
+            if (tag.contains("inputFilter")) {
+                inputFilterHandler.deserializeNBT(registries, tag.getCompound("inputFilter"));
+            }
+            if (tag.contains("filterLetters")) {
+                int[] saved = tag.getIntArray("filterLetters");
+                System.arraycopy(saved, 0, filterLetters, 0, Math.min(saved.length, filterLetters.length));
+            }
         }
         if (tag.contains("outputFilter")) {
             outputFilterHandler.deserializeNBT(registries, tag.getCompound("outputFilter"));
@@ -1081,12 +1126,6 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
         }
         if (tag.contains("input")) {
             inputHandler.deserializeNBT(registries, tag.getCompound("input"));
-        }
-
-        // Load filter letters
-        if (tag.contains("filterLetters")) {
-            int[] saved = tag.getIntArray("filterLetters");
-            System.arraycopy(saved, 0, filterLetters, 0, Math.min(saved.length, filterLetters.length));
         }
 
         // Load mark input (slot dedication) filters

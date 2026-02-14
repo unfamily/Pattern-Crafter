@@ -6,6 +6,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import net.unfamily.pattern_crafter.PatternCrafter;
 import net.unfamily.pattern_crafter.network.packet.CraftingModeSwitchC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.FilterLetterUpdateC2SPacket;
+import net.unfamily.pattern_crafter.network.packet.FilterPageC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.MarkInputC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.PatternCellUpdateC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.PatternSwitchC2SPacket;
@@ -39,6 +40,13 @@ public class ModMessages {
                 FilterLetterUpdateC2SPacket.TYPE,
                 FilterLetterUpdateC2SPacket.STREAM_CODEC,
                 FilterLetterUpdateC2SPacket::handle
+        );
+
+        // Filter page (client -> server): sync view offset so slot writes go to correct BE slots
+        registrar.playToServer(
+                FilterPageC2SPacket.TYPE,
+                FilterPageC2SPacket.STREAM_CODEC,
+                FilterPageC2SPacket::handle
         );
 
         // Crafting mode switch (client -> server)

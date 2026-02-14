@@ -8,6 +8,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.item.Items;
@@ -15,6 +16,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import net.unfamily.pattern_crafter.PatternCrafter;
 import net.unfamily.pattern_crafter.network.packet.CraftingModeSwitchC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.FilterLetterUpdateC2SPacket;
+import net.unfamily.pattern_crafter.network.packet.FilterPageC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.MarkInputC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.PatternCellUpdateC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.PatternSwitchC2SPacket;
@@ -53,7 +55,7 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
     private static final int CRAFT_ICON_SIZE = 18;
     private static final int CRAFT_ICON_HEIGHT = 36;
 
-    /** Redstone button: same graphics as iskandert_utilities. Copy medium_buttons.png and redstone_gui.png from iska_utils into pattern_crafter/textures/gui. */
+    /** Redstone button: same graphics as iskandert_utilities. Copy medium_buttons.png, redstone_gui.png from iska_utils into pattern_crafter/textures/gui. */
     private static final ResourceLocation MEDIUM_BUTTONS =
             ResourceLocation.fromNamespaceAndPath(PatternCrafter.MODID, "textures/gui/medium_buttons.png");
     private static final ResourceLocation REDSTONE_GUI =
@@ -93,6 +95,10 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
     private Button nextPatternButton;
     private Button savePatternButton;
 
+    /** Filter page: ">" at end of first row of filter slots, "<" below it (only when slot count > 18). */
+    private Button prevFilterPageButton;
+    private Button nextFilterPageButton;
+
     /** Pending pattern edits (not sent until Save). null = no pending; applies to pattern at pendingPatternIndex. */
     private int[] pendingGridCells;
     private int pendingPatternIndex = -1;
@@ -100,8 +106,13 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
     // 3x3 pattern grid cells
     private final PatternCellWidget[][] gridCells = new PatternCellWidget[3][3];
 
-    // Filter letter labels: count = menu.getInputFilterSlotCount() (18 or 36, etc.), created in init()
+    // Filter letter labels: when slot count > 18 we show 18 at a time (pagination); else all
     private PatternCellWidget[] filterLabels = new PatternCellWidget[0];
+    /** Current page of input filter slots (0-based); only used when slot count > 18. */
+    private int currentFilterPage = 0;
+    /** Cooldown after page change to avoid rapid clicks mixing data (ticks). */
+    private int filterPageChangeCooldownTicks = 0;
+    private static final int FILTER_PAGE_COOLDOWN_TICKS = 3;
 
     public ImprovedPatternCrafterScreen(ImprovedPatternCrafterMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
@@ -206,16 +217,15 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
             }
         }
 
-        // ===== Filter letter labels: row 0 above first slot row, row r>0 below slot row r (like original) =====
-        // Original: row1 labels above y=47, row2 labels below second row (65+18=83 + gap)
+        // ===== Filter letter labels: when n > 18 we show 18 per page (2 rows); else all n =====
         int filterX = this.leftPos + 79;
         int labelXOffset = (18 - FILTER_LABEL_WIDTH) / 2;
         int n = menu.getInputFilterSlotCount();
-        filterLabels = new PatternCellWidget[n];
-        for (int i = 0; i < n; i++) {
+        int labelCount = n > 18 ? 18 : n;
+        filterLabels = new PatternCellWidget[labelCount];
+        for (int i = 0; i < labelCount; i++) {
             int row = i / 9;
             int col = i % 9;
-            // Row 0: above first slot row. Row r>0: below slot row r (bottom at 47 + (r+1)*18)
             int labelY = row == 0
                     ? this.topPos + 46 - 1 - FILTER_LABEL_GAP - FILTER_LABEL_HEIGHT
                     : this.topPos + 47 + (row + 1) * 18 + FILTER_LABEL_GAP;
@@ -226,6 +236,60 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
                     this::onFilterLabelClick
             );
             addRenderableWidget(filterLabels[i]);
+        }
+
+        // Filter page: ">" at end of first row of filter slots, "<" directly below
+        if (n > 18) {
+            int filterRow1X = this.leftPos + 79;
+            int filterRow1Y = this.topPos + 47;
+            int slotRowW = 9 * 18; // 162
+            int btnW = 12;
+            int btnH = 14;
+            int btnX = filterRow1X + slotRowW + 2; // 2px after last slot of row 1
+            nextFilterPageButton = Button.builder(Component.literal(">"), btn -> setFilterPageFromButton(currentFilterPage + 1))
+                    .bounds(btnX, filterRow1Y, btnW, btnH)
+                    .build();
+            addRenderableWidget(nextFilterPageButton);
+            prevFilterPageButton = Button.builder(Component.literal("<"), btn -> setFilterPageFromButton(currentFilterPage - 1))
+                    .bounds(btnX, filterRow1Y + 18, btnW, btnH)
+                    .build();
+            addRenderableWidget(prevFilterPageButton);
+        } else {
+            prevFilterPageButton = null;
+            nextFilterPageButton = null;
+        }
+    }
+
+    /** Number of filter pages: 18 slots per page; remainder > 0 => +1 page. */
+    private int getFilterPageCount() {
+        int n = menu.getInputFilterSlotCount();
+        if (n <= 18) return 1;
+        return (n % 18 == 0) ? (n / 18) : (n / 18 + 1);
+    }
+
+    private void setFilterPage(int page) {
+        if (filterPageChangeCooldownTicks > 0) return;
+        int maxPage = getFilterPageCount() - 1;
+        int newPage = Math.max(0, Math.min(maxPage, page));
+        if (newPage == currentFilterPage) return;
+        // Block writes on the view so container sync (possibly from previous page) doesn't overwrite the new page's slots
+        var viewHandler = menu.getInputFilterViewHandler();
+        if (viewHandler != null) viewHandler.setAcceptWrites(false);
+        currentFilterPage = newPage;
+        filterPageChangeCooldownTicks = FILTER_PAGE_COOLDOWN_TICKS;
+        menu.setInputFilterViewOffset(currentFilterPage * 18);
+        if (menu.getBlockEntity() != null) {
+            PacketDistributor.sendToServer(new FilterPageC2SPacket(menu.getBlockEntity().getBlockPos(), currentFilterPage));
+        }
+    }
+
+    /** Called by filter page prev/next buttons; updates page and plays sound. */
+    private void setFilterPageFromButton(int page) {
+        int maxPage = getFilterPageCount() - 1;
+        int newPage = Math.max(0, Math.min(maxPage, page));
+        if (newPage != currentFilterPage) {
+            setFilterPage(newPage);
+            playButtonSound();
         }
     }
 
@@ -306,15 +370,17 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
     // ===== Filter Label Actions =====
 
     private void onFilterLabelClick(PatternCellWidget widget) {
-        if (menu.getBlockEntity() != null) {
-            PacketDistributor.sendToServer(
-                    new FilterLetterUpdateC2SPacket(
-                            menu.getBlockEntity().getBlockPos(),
-                            widget.getCellIndex(),
-                            widget.getValue()
-                    )
-            );
-        }
+        if (menu.getBlockEntity() == null) return;
+        int n = menu.getInputFilterSlotCount();
+        int filterIndex = n > 18 ? currentFilterPage * 18 + widget.getCellIndex() : widget.getCellIndex();
+        if (filterIndex >= n) return;
+        PacketDistributor.sendToServer(
+                new FilterLetterUpdateC2SPacket(
+                        menu.getBlockEntity().getBlockPos(),
+                        filterIndex,
+                        widget.getValue()
+                )
+        );
     }
 
     // ===== Sync from ContainerData =====
@@ -360,18 +426,39 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
             filterLabels[i].setMaxLetter(maxLetter);
         }
 
-        // Update filter labels and their dynamic tooltips
+        // When paginated, the menu’s 18 slots are a view over BE; set offset so they show the current page
         int filterCount = menu.getInputFilterSlotCount();
-        for (int i = 0; i < filterCount && i < filterLabels.length; i++) {
-            int letterValue = menu.getFilterLetter(i);
+        boolean paginated = filterCount > 18;
+        if (filterPageChangeCooldownTicks > 0) {
+            filterPageChangeCooldownTicks--;
+            if (filterPageChangeCooldownTicks == 0) {
+                var viewHandler = menu.getInputFilterViewHandler();
+                if (viewHandler != null) viewHandler.setAcceptWrites(true);
+            }
+        }
+        if (paginated) {
+            int pageCount = getFilterPageCount();
+            currentFilterPage = Math.max(0, Math.min(menu.getSyncedFilterPage(), pageCount - 1));
+            menu.setInputFilterViewOffset(currentFilterPage * 18);
+        }
+        for (int i = 0; i < filterLabels.length; i++) {
+            int slotIndex = paginated ? currentFilterPage * 18 + i : i;
+            if (slotIndex >= filterCount) {
+                filterLabels[i].setValue(0);
+                filterLabels[i].setTooltip(null);
+                filterLabels[i].visible = false;
+                continue;
+            }
+            if (paginated) filterLabels[i].visible = true;
+            int letterValue = menu.getFilterLetter(slotIndex);
             filterLabels[i].setValue(letterValue);
 
             if (letterValue == 0) {
                 filterLabels[i].setTooltip(null);
             } else {
+                // Menu has 18 slots (0–17) showing current page via view; slot i = BE slot slotIndex
                 ItemStack filterItem = menu.getSlot(ImprovedPatternCrafterMenu.INPUT_FILTER_START + i).getItem();
                 if (filterItem.isEmpty()) {
-                    // Wildcard: any item (excluding other specific filters)
                     filterLabels[i].setTooltip(Tooltip.create(
                             Component.translatable("gui.pattern_crafter.shift_click_clear")
                                     .append(Component.literal("\n"))
@@ -380,7 +467,6 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
                                     .append(Component.translatable("gui.pattern_crafter.filter_excluding_others"))
                     ));
                 } else {
-                    // Specific item allowed
                     filterLabels[i].setTooltip(Tooltip.create(
                             Component.translatable("gui.pattern_crafter.shift_click_clear")
                                     .append(Component.literal("\n"))
@@ -401,9 +487,21 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
         guiGraphics.blit(TEXTURE, x, y, 0, 0, this.imageWidth, this.imageHeight, GUI_WIDTH, GUI_HEIGHT);
     }
 
+    /** Input filter slots are already in the background texture; do not draw slot backgrounds. Items drawn in renderInputFilterItemsFromBackend. */
+    @Override
+    protected void renderSlot(GuiGraphics guiGraphics, Slot slot) {
+        if (slot.index >= ImprovedPatternCrafterMenu.INPUT_FILTER_START && slot.index < menu.getInputFilterEnd()) {
+            return;
+        }
+        super.renderSlot(guiGraphics, slot);
+    }
+
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         super.render(guiGraphics, mouseX, mouseY, partialTick);
+
+        // Single visualization: input filter slots are drawn without item in renderSlot; we draw items only from backend here.
+        renderInputFilterItemsFromBackend(guiGraphics);
 
         // Upgrade slots: icons when hasUpgrades(), else dim like disabled filters
         if (menu.getBlockEntity() != null && menu.getBlockEntity().hasUpgrades()) {
@@ -414,6 +512,8 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
 
         // Draw dark overlay on disabled input filter slots (letter == 0)
         renderDisabledFilterOverlays(guiGraphics);
+        // When paginated with irregular count, obscure slots beyond the actual count (no labels, no interaction)
+        renderMissingFilterSlotOverlays(guiGraphics);
 
         // Ghost items in input slots when empty but have mark-input filter (like Structure Placer)
         renderMarkInputGhosts(guiGraphics);
@@ -440,6 +540,32 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
         renderMarkInputTooltip(guiGraphics, mouseX, mouseY);
 
         this.renderTooltip(guiGraphics, mouseX, mouseY);
+    }
+
+    /**
+     * Renders input filter slot items by reading from the block entity at backend index
+     * (currentFilterPage*18 + i when paginated). This avoids desync: like iskandert_utilities
+     * DeepDrawerExtractor scrollbar, the visible content is derived from scroll/page + backend,
+     * not from container slot sync timing.
+     */
+    private void renderInputFilterItemsFromBackend(GuiGraphics guiGraphics) {
+        var be = menu.getBlockEntity();
+        if (be == null) return;
+        int n = menu.getInputFilterSlotCount();
+        int visible = menu.getInputFilterMenuSlotCount();
+        int startX = leftPos + 80;
+        int startY = topPos + 47;
+        for (int i = 0; i < visible; i++) {
+            int backendIndex = (n > 18) ? (currentFilterPage * 18 + i) : i;
+            if (backendIndex >= n) continue;
+            ItemStack stack = be.getInputFilterHandler().getStackInSlot(backendIndex);
+            int col = i % 9;
+            int row = i / 9;
+            int x = startX + col * 18;
+            int y = startY + row * 18;
+            guiGraphics.renderItem(stack, x, y);
+            guiGraphics.renderItemDecorations(this.font, stack, x, y);
+        }
     }
 
     /** Slight darkening overlay when slot is empty (like iska_utils modular fan). */
@@ -490,18 +616,43 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
     /**
      * Renders a semi-transparent dark overlay on input filter slots
      * whose letter assignment is empty (disabled).
+     * When slot count > 18, the same 18 positions (first two rows) are recycled for each page.
      */
     private void renderDisabledFilterOverlays(GuiGraphics guiGraphics) {
         int overlayColor = 0xC0101010; // Dark semi-transparent
-        for (int i = 0; i < menu.getInputFilterSlotCount(); i++) {
+        int n = menu.getInputFilterSlotCount();
+        int start = (n > 18) ? currentFilterPage * 18 : 0;
+        int end = (n > 18) ? Math.min(start + 18, n) : n;
+        for (int i = start; i < end; i++) {
             if (menu.getFilterLetter(i) == 0) {
-                int row = i / 9;
-                int col = i % 9;
-                int slotX = this.leftPos + 80 + col * 18;
-                int slotY = this.topPos + 47 + row * 18;
-                // Overlay covers the 16x16 item area inside the 18x18 slot frame
+                // Always use the same 18-cell zone (rows 0–1): local index 0–17
+                int localRow = (i - start) / 9;
+                int localCol = (i - start) % 9;
+                int slotX = this.leftPos + 80 + localCol * 18;
+                int slotY = this.topPos + 47 + localRow * 18;
                 guiGraphics.fill(slotX, slotY, slotX + 16, slotY + 16, overlayColor);
             }
+        }
+    }
+
+    /**
+     * When paginated with irregular slot count (not a multiple of 18), the last page has "missing" slots.
+     * Those positions are fully obscured (no letter labels, no interaction) so they look disabled.
+     */
+    private void renderMissingFilterSlotOverlays(GuiGraphics guiGraphics) {
+        int filterCount = menu.getInputFilterSlotCount();
+        if (filterCount <= 18) return;
+        int start = currentFilterPage * 18;
+        if (start >= filterCount) return;
+        int endOnPage = Math.min(start + 18, filterCount);
+        if (endOnPage >= start + 18) return; // Full page, no missing slots
+        int missingColor = 0xE0101010; // Stronger dark overlay for missing/invalid slots
+        for (int localIndex = endOnPage - start; localIndex < 18; localIndex++) {
+            int localRow = localIndex / 9;
+            int localCol = localIndex % 9;
+            int slotX = this.leftPos + 80 + localCol * 18;
+            int slotY = this.topPos + 47 + localRow * 18;
+            guiGraphics.fill(slotX, slotY, slotX + 16, slotY + 16, missingColor);
         }
     }
 
