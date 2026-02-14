@@ -6,12 +6,15 @@
       "BAB"
     ],
     "key": {
-      "A": {
-        "tag": "c:gems/quartz"
-      },
-      "B": {
-        "tag": "c:gems/lapis"
-      },
+      "A": [
+        {"tag": "c:gems/quartz"},
+        {"tag": "c:gems/diamond"},
+        {"tag": "c:gems/prismarine"}
+      ],
+      "B": [
+        {"tag": "c:gems/lapis"},
+        {"tag": "minecraft:glow_ink_sac"}
+      ],
       "C": {
         "item": "pattern_crafter:pattern_crafter"
       }
