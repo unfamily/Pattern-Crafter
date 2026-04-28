@@ -1117,6 +1117,11 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
         // Load mark input (slot dedication) filters
         if (tag.contains("markInputFilters")) {
             CompoundTag markInputTag = tag.getCompound("markInputFilters");
+            // The save format only includes non-empty entries, so we must clear missing slots
+            // to avoid client-side stale filters when an entry is removed.
+            for (int i = 0; i < markInputFilters.size(); i++) {
+                markInputFilters.set(i, ItemStack.EMPTY);
+            }
             for (int i = 0; i < markInputFilters.size(); i++) {
                 String slotKey = "slot" + i;
                 if (markInputTag.contains(slotKey)) {
