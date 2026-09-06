@@ -90,7 +90,7 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
     }
 
     private int getContainerDataSize() {
-        return getDataFilterPageIndex() + 1; // energy, maxEnergy, mode, redstone, timer, interval, filterPage
+        return getDataRemainderRoutingModeIndex() + 1;
     }
 
     private int getDataMaxEnergyIndex() { return getDataEnergyStoredIndex() + 1; }
@@ -99,6 +99,8 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
     private int getDataCraftingTimerIndex() { return getDataEnergyStoredIndex() + 4; }
     private int getDataCraftingIntervalIndex() { return getDataEnergyStoredIndex() + 5; }
     private int getDataFilterPageIndex() { return getDataCraftingIntervalIndex() + 1; }
+    private int getDataRecursiveOutputModeIndex() { return getDataFilterPageIndex() + 1; }
+    private int getDataRemainderRoutingModeIndex() { return getDataFilterPageIndex() + 2; }
 
     private final ImprovedPatternCrafterBlockEntity blockEntity;
     private final ContainerData patternContainerData;
@@ -156,6 +158,8 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
                 final int dataTimer = getDataCraftingTimerIndex();
                 final int dataInterval = getDataCraftingIntervalIndex();
                 final int dataFilterPage = getDataFilterPageIndex();
+                final int dataRecursiveOutput = getDataRecursiveOutputModeIndex();
+                final int dataRemainderRouting = getDataRemainderRoutingModeIndex();
                 this.patternContainerData = new ContainerData() {
                     @Override
                     public int get(int index) {
@@ -168,6 +172,8 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
                         if (index == dataTimer) return pcbe.getCraftingTimer();
                         if (index == dataInterval) return pcbe.getEffectiveCraftingInterval();
                         if (index == dataFilterPage) return pcbe.getGuiFilterPage();
+                        if (index == dataRecursiveOutput) return pcbe.getRecursiveOutputMode();
+                        if (index == dataRemainderRouting) return pcbe.getRemainderRoutingMode();
                         if (index >= DATA_FILTER_LETTERS_START && index < dataEnergy) {
                             return pcbe.getFilterLetter(index - DATA_FILTER_LETTERS_START);
                         }
@@ -255,6 +261,16 @@ public class ImprovedPatternCrafterMenu extends AbstractContainerMenu {
     /** Current filter page (0-based) synced from server; only meaningful when inputFilterSlotCount > 18. */
     public int getSyncedFilterPage() {
         return patternContainerData.get(getDataFilterPageIndex());
+    }
+
+    /** 1–3: recursive output routing mode (synced). */
+    public int getSyncedRecursiveOutputMode() {
+        return patternContainerData.get(getDataRecursiveOutputModeIndex());
+    }
+
+    /** 1–2: remainder routing mode (synced). */
+    public int getSyncedRemainderRoutingMode() {
+        return patternContainerData.get(getDataRemainderRoutingModeIndex());
     }
 
     // ===== Ghost Slot Click Handling =====

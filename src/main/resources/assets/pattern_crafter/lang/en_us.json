@@ -20,5 +20,20 @@
   "gui.pattern_crafter.mark_input":"Mark Input",
   "gui.pattern_crafter.mark_input.tooltip.line1":"§7Click to save mark input from current inventory",
   "gui.pattern_crafter.mark_input.tooltip.line2":"§7Shift+Click to clear all mark input",
-  "gui.pattern_crafter.mark_input.tooltip.line3":"§7Ctrl/Alt+Click to clear mark input without matching items"
+  "gui.pattern_crafter.mark_input.tooltip.line3":"§7Ctrl/Alt+Click to clear mark input without matching items",
+  "gui.pattern_crafter.recursive_outputs.button.1": "Res. Eject",
+  "gui.pattern_crafter.recursive_outputs.button.2": "Res. Keep",
+  "gui.pattern_crafter.recursive_outputs.button.3": "Res. Smart",
+  "gui.pattern_crafter.unused_inputs.button.1": "Ing. Keep",
+  "gui.pattern_crafter.unused_inputs.button.2": "Ing. Eject",
+  "gui.pattern_crafter.cycle_hint.line1": "Left click: next",
+  "gui.pattern_crafter.cycle_hint.line2": "Right click: previous",
+  "gui.pattern_crafter.crafting_mode.tooltip.0": "Both: accept shaped and shapeless recipes.",
+  "gui.pattern_crafter.crafting_mode.tooltip.1": "Only Shaped: accept only shaped recipes.",
+  "gui.pattern_crafter.crafting_mode.tooltip.2": "Only Shapeless: accept only shapeless recipes.",
+  "gui.pattern_crafter.recursive_outputs.tooltip.1": "Result mode: Eject — results go to machine output slots only. Crafting stops if there is no space.",
+  "gui.pattern_crafter.recursive_outputs.tooltip.2": "Result mode: Keep — craft anyway, then merge result into inputs first; leftover (partial) goes to outputs. Repeats crafting this tick (depth limited). Crafting stops if any part would overflow.",
+  "gui.pattern_crafter.recursive_outputs.tooltip.3": "Result mode: Smart — merge as much of the result into inputs as possible (what fits), eject the rest to outputs. No recursion. Crafting stops if any part would overflow.",
+  "gui.pattern_crafter.unused_inputs.tooltip.1": "Ingredient mode: Keep — remainders (unused inputs) are inserted into input slots first, then outputs. Crafting is blocked if they don't fit.",
+  "gui.pattern_crafter.unused_inputs.tooltip.2": "Ingredient mode: Eject — remainders (unused inputs) are inserted into output slots first. Crafting is blocked if they don't fit."
 }

@@ -20,5 +20,20 @@
   "gui.pattern_crafter.mark_input":"Segna input",
   "gui.pattern_crafter.mark_input.tooltip.line1":"§7Click per salvare l'input segnato dall'inventario corrente",
   "gui.pattern_crafter.mark_input.tooltip.line2":"§7Shift+Click per cancellare tutto l'input segnato",
-  "gui.pattern_crafter.mark_input.tooltip.line3":"§7Ctrl/Alt+Click per cancellare l'input segnato senza item corrispondenti"
+  "gui.pattern_crafter.mark_input.tooltip.line3":"§7Ctrl/Alt+Click per cancellare l'input segnato senza item corrispondenti",
+  "gui.pattern_crafter.recursive_outputs.button.1": "Res. Eject",
+  "gui.pattern_crafter.recursive_outputs.button.2": "Res. Keep",
+  "gui.pattern_crafter.recursive_outputs.button.3": "Res. Smart",
+  "gui.pattern_crafter.unused_inputs.button.1": "Ing. Keep",
+  "gui.pattern_crafter.unused_inputs.button.2": "Ing. Eject",
+  "gui.pattern_crafter.cycle_hint.line1": "Click sinistro: successivo",
+  "gui.pattern_crafter.cycle_hint.line2": "Click destro: precedente",
+  "gui.pattern_crafter.crafting_mode.tooltip.0": "Entrambi: accetta ricette sagomate e senza forma.",
+  "gui.pattern_crafter.crafting_mode.tooltip.1": "Solo sagomato: accetta solo ricette sagomate.",
+  "gui.pattern_crafter.crafting_mode.tooltip.2": "Solo senza forma: accetta solo ricette senza forma.",
+  "gui.pattern_crafter.recursive_outputs.tooltip.1": "Risultato: Eject — il risultato va solo negli slot output della macchina. Il craft si ferma se non c'è spazio.",
+  "gui.pattern_crafter.recursive_outputs.tooltip.2": "Risultato: Keep — crafta comunque, poi unisce il risultato negli input; la parte che non entra (parziale) va in output. Ripete il craft nello stesso tick (profondità limitata). Si ferma se qualcosa overflowa.",
+  "gui.pattern_crafter.recursive_outputs.tooltip.3": "Risultato: Smart — unisce negli input quanto possibile (quello che entra) e manda il resto in output. Niente ricorsione. Il craft si ferma se qualcosa overflowa.",
+  "gui.pattern_crafter.unused_inputs.tooltip.1": "Ingredienti: Keep — i resti (input non consumati) vanno prima negli slot input, poi output. Il craft è bloccato se non entrano.",
+  "gui.pattern_crafter.unused_inputs.tooltip.2": "Ingredienti: Eject — i resti (input non consumati) vanno prima negli slot output. Il craft è bloccato se non entrano."
 }

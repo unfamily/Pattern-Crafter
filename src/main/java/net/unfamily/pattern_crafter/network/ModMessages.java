@@ -11,6 +11,8 @@ import net.unfamily.pattern_crafter.network.packet.MarkInputC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.PatternCellUpdateC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.PatternSwitchC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.RedstoneModeC2SPacket;
+import net.unfamily.pattern_crafter.network.packet.RecursiveOutputModeC2SPacket;
+import net.unfamily.pattern_crafter.network.packet.RemainderRoutingModeC2SPacket;
 
 /**
  * Registers all network packets for the Pattern Crafter mod.
@@ -68,6 +70,18 @@ public class ModMessages {
                 MarkInputC2SPacket.TYPE,
                 MarkInputC2SPacket.STREAM_CODEC,
                 MarkInputC2SPacket::handle
+        );
+
+        registrar.playToServer(
+                RecursiveOutputModeC2SPacket.TYPE,
+                RecursiveOutputModeC2SPacket.STREAM_CODEC,
+                RecursiveOutputModeC2SPacket::handle
+        );
+
+        registrar.playToServer(
+                RemainderRoutingModeC2SPacket.TYPE,
+                RemainderRoutingModeC2SPacket.STREAM_CODEC,
+                RemainderRoutingModeC2SPacket::handle
         );
     }
 }

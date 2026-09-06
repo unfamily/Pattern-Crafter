@@ -23,6 +23,11 @@ public class PatternData {
     /** Default: only shaped (1); user can change to both (0) or shapeless only (2) */
     private int craftingMode = CRAFTING_MODE_SHAPED_ONLY;
 
+    /** Result mode (per pattern): 1 = Eject, 2 = Keep (recursive), 3 = Smart (no recursion) */
+    private int resultMode = 1;
+    /** Ingredient mode (per pattern): 1 = Keep, 2 = Eject */
+    private int ingredientMode = 1;
+
     public PatternData() {
         // All cells empty by default
     }
@@ -38,6 +43,30 @@ public class PatternData {
     /** Cycles mode: both -> shaped only -> shapeless only -> both */
     public void cycleCraftingMode() {
         craftingMode = (craftingMode + 1) % 3;
+    }
+
+    public int getResultMode() {
+        return resultMode;
+    }
+
+    public void setResultMode(int mode) {
+        this.resultMode = Math.max(1, Math.min(3, mode));
+    }
+
+    public void cycleResultMode() {
+        resultMode = resultMode >= 3 ? 1 : resultMode + 1;
+    }
+
+    public int getIngredientMode() {
+        return ingredientMode;
+    }
+
+    public void setIngredientMode(int mode) {
+        this.ingredientMode = Math.max(1, Math.min(2, mode));
+    }
+
+    public void cycleIngredientMode() {
+        ingredientMode = ingredientMode == 1 ? 2 : 1;
     }
 
     public int getCell(int index) {
@@ -87,6 +116,8 @@ public class PatternData {
         CompoundTag tag = new CompoundTag();
         tag.putIntArray("grid", grid.clone());
         tag.putInt("craftingMode", craftingMode);
+        tag.putInt("resultMode", resultMode);
+        tag.putInt("ingredientMode", ingredientMode);
         return tag;
     }
 
@@ -98,6 +129,12 @@ public class PatternData {
         }
         if (tag.contains("craftingMode")) {
             data.craftingMode = Math.max(0, Math.min(2, tag.getInt("craftingMode")));
+        }
+        if (tag.contains("resultMode")) {
+            data.resultMode = Math.max(1, Math.min(3, tag.getInt("resultMode")));
+        }
+        if (tag.contains("ingredientMode")) {
+            data.ingredientMode = Math.max(1, Math.min(2, tag.getInt("ingredientMode")));
         }
         return data;
     }

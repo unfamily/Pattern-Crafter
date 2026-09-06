@@ -96,7 +96,7 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
             if (slot >= 0 && slot < markInputFilters.size()) {
                 ItemStack filter = markInputFilters.get(slot);
                 if (!filter.isEmpty()) {
-                    return ItemStack.isSameItemSameComponents(stack, filter);
+                    return sameItemType(stack, filter);
                 }
             }
             return true;
@@ -113,6 +113,8 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
     // Crafting system
     private int craftingTimer = 0;
     private int craftingPatternIndex = 0; // Round-robin index, separate from GUI currentPatternIndex
+
+    // Note: crafting always respects crafting interval; no same-tick recursion.
 
     // Energy storage (RF/FE)
     private final EnergyStorageImpl energyStorage = new EnergyStorageImpl(getEnergyCapacity());
@@ -134,6 +136,32 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
 
     public void setGuiFilterPage(int page) {
         this.guiFilterPage = Math.max(0, page);
+    }
+
+    /** Result mode for current pattern: 1 = Eject, 2 = Keep, 3 = Smart. */
+    public int getRecursiveOutputMode() {
+        PatternData p = getCurrentPattern();
+        return p != null ? p.getResultMode() : 1;
+    }
+
+    public void cycleRecursiveOutputMode() {
+        PatternData p = getCurrentPattern();
+        if (p == null) return;
+        p.cycleResultMode();
+        setChanged();
+    }
+
+    /** Ingredient mode for current pattern: 1 = Keep, 2 = Eject. */
+    public int getRemainderRoutingMode() {
+        PatternData p = getCurrentPattern();
+        return p != null ? p.getIngredientMode() : 1;
+    }
+
+    public void cycleRemainderRoutingMode() {
+        PatternData p = getCurrentPattern();
+        if (p == null) return;
+        p.cycleIngredientMode();
+        setChanged();
     }
 
     /**
@@ -488,7 +516,7 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
             ItemStack filter = markInputFilters.get(slot);
             if (!filter.isEmpty()) {
                 ItemStack currentStack = inputHandler.getStackInSlot(slot);
-                if (currentStack.isEmpty() || !ItemStack.isSameItemSameComponents(currentStack, filter)) {
+                if (currentStack.isEmpty() || !sameItemType(currentStack, filter)) {
                     markInputFilters.set(slot, ItemStack.EMPTY);
                 }
             }
@@ -638,7 +666,7 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
 
                 if (tryCraftPattern(pattern, prioritySlot)) {
                     craftingPatternIndex = (patternIndex + 1) % totalPatterns;
-                    return; // Success!
+                    return;
                 }
             }
         }
@@ -657,14 +685,12 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
         List<ItemStack> specificItems = collectSpecificFilterItems();
         // Additional exclusions from blacklisted results (grows on each retry)
         List<ItemStack> craftExclusions = new ArrayList<>();
+        // Type-only exclusions for retrying different candidates (forces trying next assigned type)
+        List<ItemStack> craftTypeExclusions = new ArrayList<>();
 
         // Retry loop: when a result is blacklisted, exclude those items and try again
         int maxRetries = inputHandler.getSlots(); // can't have more distinct items than slots
         for (int retry = 0; retry <= maxRetries; retry++) {
-
-            // Build combined exclusion list for wildcard matching
-            List<ItemStack> wildcardExclusions = new ArrayList<>(specificItems);
-            wildcardExclusions.addAll(craftExclusions);
 
             // Track available item counts per input slot
             int[] availableCounts = new int[inputHandler.getSlots()];
@@ -700,9 +726,9 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
 
                     if (acceptedItems.isEmpty()) {
                         // Letter has no filter assigned: accept any item NOT assigned by other filter slots
-                        foundSlot = findWildcardItem(wildcardExclusions, availableCounts, prioritySlot);
+                        foundSlot = findWildcardItem(specificItems, craftExclusions, craftTypeExclusions, availableCounts, prioritySlot);
                     } else {
-                        foundSlot = findSpecificItem(acceptedItems, availableCounts, craftExclusions, prioritySlot);
+                        foundSlot = findSpecificItem(acceptedItems, availableCounts, craftExclusions, craftTypeExclusions, prioritySlot);
                     }
 
                     // Commit this item type for all cells with this letter
@@ -742,6 +768,7 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
             if (recipe.isEmpty()) {
                 // No recipe found - exclude these items and retry with different ones
                 addDistinctItems(craftExclusions, craftingGrid);
+                excludeDistinctItemTypes(craftTypeExclusions, letterItemDecision.values());
                 continue;
             }
 
@@ -751,16 +778,19 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
             boolean isShaped = recipeValue instanceof ShapedRecipe;
             if (mode == 1 && !isShaped) {
                 addDistinctItems(craftExclusions, craftingGrid);
+                excludeDistinctItemTypes(craftTypeExclusions, letterItemDecision.values());
                 continue;
             }
             if (mode == 2 && isShaped) {
                 addDistinctItems(craftExclusions, craftingGrid);
+                excludeDistinctItemTypes(craftTypeExclusions, letterItemDecision.values());
                 continue;
             }
 
             ItemStack result = recipe.get().value().assemble(craftingInput, level.registryAccess());
             if (result.isEmpty()) {
                 addDistinctItems(craftExclusions, craftingGrid);
+                excludeDistinctItemTypes(craftTypeExclusions, letterItemDecision.values());
                 continue;
             }
 
@@ -768,11 +798,18 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
             if (isInOutputFilter(result)) {
                 // Blacklisted! Exclude the items that produced this result and retry
                 addDistinctItems(craftExclusions, craftingGrid);
+                excludeDistinctItemTypes(craftTypeExclusions, letterItemDecision.values());
                 continue;
             }
 
-            // Check if there's space in the output handler
-            if (!canInsertIntoOutput(result)) return false; // No space = stop entirely
+            // Space check: must fit result + remainders; never drop anything.
+            NonNullList<ItemStack> remainingItemsSim = recipe.get().value().getRemainingItems(craftingInput);
+            int resultMode = pattern.getResultMode();
+            int ingredientMode = pattern.getIngredientMode();
+            if (!canAcceptAfterVirtualCraft(result, reservedSlotForCell, remainingItemsSim, resultMode, ingredientMode)) {
+                return false; // stop: no drop fallback
+            }
+            // Result/ingredient modes are per-pattern; recursion decision is set only on success.
 
             // Check if there's enough energy (when capacity is 0, never require or consume - e.g. normal Pattern Crafter)
             int energyCost = getEnergyPerCraft();
@@ -793,15 +830,14 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
                 }
             }
 
-            // Insert the crafted result into output slots
-            insertIntoOutput(result);
+            routeCraftResult(result, resultMode);
 
             // Handle remainder items (e.g., empty buckets from water bucket recipes)
-            NonNullList<ItemStack> remainingItems = recipe.get().value().getRemainingItems(craftingInput);
+            NonNullList<ItemStack> remainingItems = remainingItemsSim;
             for (int cell = 0; cell < remainingItems.size(); cell++) {
                 ItemStack remainder = remainingItems.get(cell);
                 if (!remainder.isEmpty()) {
-                    insertRemainderItem(remainder);
+                    insertRemainderItem(remainder, ingredientMode);
                 }
             }
 
@@ -855,7 +891,7 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
                 if (!filterItem.isEmpty()) {
                     boolean alreadyAdded = false;
                     for (ItemStack existing : specific) {
-                        if (ItemStack.isSameItemSameComponents(existing, filterItem)) {
+                        if (sameItemType(existing, filterItem)) {
                             alreadyAdded = true;
                             break;
                         }
@@ -898,7 +934,7 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
             int slot = (startSlot + i) % n;
             if (availableCounts[slot] <= 0) continue;
             ItemStack slotItem = inputHandler.getStackInSlot(slot);
-            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, target)) {
+            if (!slotItem.isEmpty() && sameItemType(slotItem, target)) {
                 return slot;
             }
         }
@@ -911,7 +947,7 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
      * @return slot index, or -1 if not found
      */
     private int findSpecificItem(List<ItemStack> acceptedItems, int[] availableCounts,
-                                 List<ItemStack> craftExclusions, int startSlot) {
+                                 List<ItemStack> craftExclusions, List<ItemStack> craftTypeExclusions, int startSlot) {
         int n = inputHandler.getSlots();
         for (int i = 0; i < n; i++) {
             int slot = (startSlot + i) % n;
@@ -920,8 +956,9 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
             if (slotItem.isEmpty()) continue;
             // Skip items excluded due to blacklisted results
             if (isItemInList(slotItem, craftExclusions)) continue;
+            if (isItemTypeInList(slotItem, craftTypeExclusions)) continue;
             for (ItemStack accepted : acceptedItems) {
-                if (ItemStack.isSameItemSameComponents(slotItem, accepted)) {
+                if (sameItemType(slotItem, accepted)) {
                     return slot;
                 }
             }
@@ -930,21 +967,56 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
     }
 
     /**
-     * Finds any item in the inputHandler that is NOT in the exclusion list, starting from startSlot.
-     * Used for wildcard letter matching: "any item except specifically assigned ones
-     * and items that led to blacklisted results".
-     * @return slot index, or -1 if not found
+     * Finds any item in the inputHandler that is NOT excluded for wildcard matching.
+     * Ghost-filter exclusions compare by item type only; crafting retry exclusions use full components.
      */
-    private int findWildcardItem(List<ItemStack> excludedItems, int[] availableCounts, int startSlot) {
+    private int findWildcardItem(List<ItemStack> ghostSpecificExclusions, List<ItemStack> craftExclusions,
+                                 List<ItemStack> craftTypeExclusions,
+                                 int[] availableCounts, int startSlot) {
         int n = inputHandler.getSlots();
         for (int i = 0; i < n; i++) {
             int slot = (startSlot + i) % n;
             if (availableCounts[slot] <= 0) continue;
             ItemStack slotItem = inputHandler.getStackInSlot(slot);
             if (slotItem.isEmpty()) continue;
-            if (!isItemInList(slotItem, excludedItems)) return slot;
+            if (!isWildcardExcluded(slotItem, ghostSpecificExclusions, craftExclusions, craftTypeExclusions)) return slot;
         }
         return -1;
+    }
+
+    /** Item type only (ignore data components) — mark input and ghost key matching. */
+    private static boolean sameItemType(ItemStack a, ItemStack b) {
+        return ItemStack.isSameItem(a, b);
+    }
+
+    private static boolean isWildcardExcluded(ItemStack slotItem, List<ItemStack> ghostSpecificExclusions,
+                                              List<ItemStack> craftExclusions, List<ItemStack> craftTypeExclusions) {
+        for (ItemStack ghost : ghostSpecificExclusions) {
+            if (sameItemType(slotItem, ghost)) return true;
+        }
+        for (ItemStack craft : craftExclusions) {
+            if (ItemStack.isSameItemSameComponents(slotItem, craft)) return true;
+        }
+        for (ItemStack craftType : craftTypeExclusions) {
+            if (sameItemType(slotItem, craftType)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isItemTypeInList(ItemStack item, List<ItemStack> list) {
+        for (ItemStack entry : list) {
+            if (sameItemType(item, entry)) return true;
+        }
+        return false;
+    }
+
+    private static void excludeDistinctItemTypes(List<ItemStack> exclusions, Iterable<ItemStack> items) {
+        for (ItemStack item : items) {
+            if (item.isEmpty()) continue;
+            if (!isItemTypeInList(item, exclusions)) {
+                exclusions.add(item.copyWithCount(1));
+            }
+        }
     }
 
     /**
@@ -994,26 +1066,127 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
     }
 
     /**
-     * Inserts a remainder item (e.g., empty bucket) back into the machine.
-     * Tries inputHandler first, then outputHandler, then drops on ground.
+     * After ingredients are consumed (simulated): merge craft result into input; return what could not fit (simulate=true).
      */
-    private void insertRemainderItem(ItemStack remainder) {
-        // Try input handler first
+    private ItemStack simulateOverflowAfterVirtualCraft(ItemStack result, int[] reservedSlotForCell) {
+        ItemStackHandler sim = new ItemStackHandler(inputHandler.getSlots());
         for (int i = 0; i < inputHandler.getSlots(); i++) {
-            remainder = inputHandler.insertItem(i, remainder, false);
-            if (remainder.isEmpty()) return;
+            sim.setStackInSlot(i, inputHandler.getStackInSlot(i).copy());
         }
-        // Try output handler
+        for (int cell = 0; cell < PatternData.GRID_SIZE; cell++) {
+            int s = reservedSlotForCell[cell];
+            if (s >= 0) {
+                sim.extractItem(s, 1, false);
+            }
+        }
+        ItemStack rest = result.copy();
+        for (int i = 0; i < sim.getSlots(); i++) {
+            rest = sim.insertItem(i, rest, true);
+            if (rest.isEmpty()) break;
+        }
+        return rest;
+    }
+
+    /**
+     * Simulate consuming ingredients, routing primary result, and inserting all remainders.
+     * If anything would overflow, crafting must not happen (no drop fallback).
+     */
+    private boolean canAcceptAfterVirtualCraft(ItemStack result, int[] reservedSlotForCell, List<ItemStack> remainders,
+                                               int resultMode, int ingredientMode) {
+        ItemStackHandler inputSim = new ItemStackHandler(inputHandler.getSlots());
+        ItemStackHandler outputSim = new ItemStackHandler(outputHandler.getSlots());
+        for (int i = 0; i < inputHandler.getSlots(); i++) {
+            inputSim.setStackInSlot(i, inputHandler.getStackInSlot(i).copy());
+        }
         for (int i = 0; i < outputHandler.getSlots(); i++) {
-            remainder = outputHandler.insertItem(i, remainder, false);
-            if (remainder.isEmpty()) return;
+            outputSim.setStackInSlot(i, outputHandler.getStackInSlot(i).copy());
         }
-        // Last resort: drop on ground
-        if (!remainder.isEmpty() && level != null) {
-            Containers.dropItemStack(level,
-                    worldPosition.getX() + 0.5, worldPosition.getY() + 1.0, worldPosition.getZ() + 0.5,
-                    remainder);
+
+        // Consume ingredients
+        for (int cell = 0; cell < PatternData.GRID_SIZE; cell++) {
+            int s = reservedSlotForCell[cell];
+            if (s >= 0) {
+                inputSim.extractItem(s, 1, false);
+            }
         }
+
+        // Route primary result
+        ItemStack rest = result.copy();
+        if (resultMode != 1) {
+            for (int i = 0; i < inputSim.getSlots(); i++) {
+                rest = inputSim.insertItem(i, rest, true);
+                if (rest.isEmpty()) break;
+            }
+        }
+        if (!rest.isEmpty()) {
+            for (int i = 0; i < outputSim.getSlots(); i++) {
+                rest = outputSim.insertItem(i, rest, true);
+                if (rest.isEmpty()) break;
+            }
+        }
+        if (!rest.isEmpty()) return false;
+
+        // Route remainders
+        for (ItemStack remainderStack : remainders) {
+            if (remainderStack.isEmpty()) continue;
+            ItemStack rem = remainderStack.copy();
+            if (ingredientMode == 2) {
+                for (int i = 0; i < outputSim.getSlots(); i++) {
+                    rem = outputSim.insertItem(i, rem, true);
+                    if (rem.isEmpty()) break;
+                }
+            } else {
+                for (int i = 0; i < inputSim.getSlots(); i++) {
+                    rem = inputSim.insertItem(i, rem, true);
+                    if (rem.isEmpty()) break;
+                }
+                if (!rem.isEmpty()) {
+                    for (int i = 0; i < outputSim.getSlots(); i++) {
+                        rem = outputSim.insertItem(i, rem, true);
+                        if (rem.isEmpty()) break;
+                    }
+                }
+            }
+            if (!rem.isEmpty()) return false;
+        }
+        return true;
+    }
+
+    /** Routes primary craft output: mode 1 = output only; modes 2–3 = input first then overflow to output. */
+    private void routeCraftResult(ItemStack result, int resultMode) {
+        if (resultMode == 1) {
+            insertIntoOutput(result);
+            return;
+        }
+        ItemStack rest = result.copy();
+        for (int i = 0; i < inputHandler.getSlots(); i++) {
+            rest = inputHandler.insertItem(i, rest, false);
+            if (rest.isEmpty()) return;
+        }
+        insertIntoOutput(rest);
+    }
+
+    /**
+     * Inserts a remainder item (e.g., empty bucket) back into the machine.
+     * Mode 1: input first, then output, then drop. Mode 2: output first, then drop.
+     */
+    private void insertRemainderItem(ItemStack remainder, int ingredientMode) {
+        if (ingredientMode == 2) {
+            for (int i = 0; i < outputHandler.getSlots(); i++) {
+                remainder = outputHandler.insertItem(i, remainder, false);
+                if (remainder.isEmpty()) return;
+            }
+        } else {
+            for (int i = 0; i < inputHandler.getSlots(); i++) {
+                remainder = inputHandler.insertItem(i, remainder, false);
+                if (remainder.isEmpty()) return;
+            }
+            for (int i = 0; i < outputHandler.getSlots(); i++) {
+                remainder = outputHandler.insertItem(i, remainder, false);
+                if (remainder.isEmpty()) return;
+            }
+        }
+        // No drop fallback: crafting should have been blocked by canAcceptAfterVirtualCraft.
     }
 
     // ===== NBT Save/Load =====
@@ -1163,6 +1336,7 @@ public class ImprovedPatternCrafterBlockEntity extends BlockEntity {
         if (tag.contains("pulseCraftPending")) {
             pulseCraftPending = tag.getBoolean("pulseCraftPending");
         }
+        // Migration: legacy global modes are ignored; modes are now saved per-pattern.
 
         // Load patterns
         if (tag.contains("currentPattern")) {

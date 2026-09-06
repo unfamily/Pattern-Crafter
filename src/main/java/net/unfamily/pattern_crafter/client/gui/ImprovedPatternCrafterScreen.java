@@ -20,6 +20,8 @@ import net.unfamily.pattern_crafter.network.packet.FilterPageC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.MarkInputC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.PatternCellUpdateC2SPacket;
 import net.unfamily.pattern_crafter.network.packet.PatternSwitchC2SPacket;
+import net.unfamily.pattern_crafter.network.packet.RecursiveOutputModeC2SPacket;
+import net.unfamily.pattern_crafter.network.packet.RemainderRoutingModeC2SPacket;
 import net.unfamily.pattern_crafter.pattern.PatternData;
 
 import java.util.ArrayList;
@@ -88,6 +90,10 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
     private Button nextPatternButton;
     private Button savePatternButton;
 
+    /** Recursive output routing (1–3) and unconsumed-input / remainder routing (1–2). */
+    private Button recursiveOutputButton;
+    private Button remainderRoutingButton;
+
     /** Filter page: ">" at end of first row of filter slots, "<" below it (only when slot count > 18). */
     private Button prevFilterPageButton;
     private Button nextFilterPageButton;
@@ -151,8 +157,8 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
         int gridStartY = this.topPos + 105;
         int gridWidth = 3 * 18; // 54px
 
-        // Order from top: pattern nav [< 1/4 >], then crafting mode (shaped/shapeless for this pattern), then Save
-        int navY = gridStartY - 14 - 2 - 14 - 2 - 14 - 2; // 3 rows of 14px + 2px gaps
+        // Place the control block above the grid (5 rows: nav, mode, save, recursive, remainder)
+        int navY = gridStartY - (14 + 2 + 14 + 2 + 14 + 2 + 14 + 2 + 14 + 2);
         int arrowWidth = 12;
         int labelWidth = gridWidth - arrowWidth * 2; // 30px for label
 
@@ -180,11 +186,30 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
         craftingModeButton = Button.builder(Component.translatable("gui.pattern_crafter.crafting_mode.both"),
                         btn -> cycleCraftingMode())
                 .bounds(gridStartX, modeButtonY, gridWidth, 14)
+                .tooltip(Tooltip.create(
+                        Component.translatable("gui.pattern_crafter.cycle_hint.line1")
+                                .append(Component.literal("\n"))
+                                .append(Component.translatable("gui.pattern_crafter.cycle_hint.line2"))
+                ))
                 .build();
         addRenderableWidget(craftingModeButton);
 
-        // Save button: apply pending pattern edits (below crafting mode)
-        int saveButtonY = modeButtonY + 14 + 2;
+        int recursiveRowY = modeButtonY + 14 + 2;
+        recursiveOutputButton = Button.builder(Component.translatable("gui.pattern_crafter.recursive_outputs.button.1"),
+                        btn -> onRecursiveOutputPressed())
+                .bounds(gridStartX, recursiveRowY, gridWidth, 14)
+                .build();
+        addRenderableWidget(recursiveOutputButton);
+
+        int remainderRowY = recursiveRowY + 14 + 2;
+        remainderRoutingButton = Button.builder(Component.translatable("gui.pattern_crafter.unused_inputs.button.1"),
+                        btn -> onRemainderRoutingPressed())
+                .bounds(gridStartX, remainderRowY, gridWidth, 14)
+                .build();
+        addRenderableWidget(remainderRoutingButton);
+
+        // Save button: apply pending pattern edits (last)
+        int saveButtonY = remainderRowY + 14 + 2;
         savePatternButton = Button.builder(Component.translatable("gui.pattern_crafter.save_pattern"),
                         btn -> savePendingPattern())
                 .bounds(gridStartX, saveButtonY, gridWidth, 14)
@@ -205,6 +230,10 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
                 );
                 gridCells[row][col].setTooltip(Tooltip.create(
                         Component.translatable("gui.pattern_crafter.shift_click_clear")
+                                .append(Component.literal("\n"))
+                                .append(Component.translatable("gui.pattern_crafter.cycle_hint.line1"))
+                                .append(Component.literal("\n"))
+                                .append(Component.translatable("gui.pattern_crafter.cycle_hint.line2"))
                 ));
                 addRenderableWidget(gridCells[row][col]);
             }
@@ -330,6 +359,22 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
         }
     }
 
+    private void onRecursiveOutputPressed() {
+        if (menu.getBlockEntity() != null) {
+            PacketDistributor.sendToServer(
+                    new RecursiveOutputModeC2SPacket(menu.getBlockEntity().getBlockPos())
+            );
+        }
+    }
+
+    private void onRemainderRoutingPressed() {
+        if (menu.getBlockEntity() != null) {
+            PacketDistributor.sendToServer(
+                    new RemainderRoutingModeC2SPacket(menu.getBlockEntity().getBlockPos())
+            );
+        }
+    }
+
     private void cycleRedstoneMode() {
         if (menu.getBlockEntity() != null) {
             PacketDistributor.sendToServer(
@@ -390,6 +435,31 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
             default -> "gui.pattern_crafter.crafting_mode.both";
         };
         craftingModeButton.setMessage(Component.translatable(modeKey));
+        craftingModeButton.setTooltip(Tooltip.create(
+                Component.translatable("gui.pattern_crafter.crafting_mode.tooltip." + mode)
+                        .append(Component.literal("\n"))
+                        .append(Component.translatable("gui.pattern_crafter.cycle_hint.line1"))
+                        .append(Component.literal("\n"))
+                        .append(Component.translatable("gui.pattern_crafter.cycle_hint.line2"))
+        ));
+
+        int recursiveMode = menu.getSyncedRecursiveOutputMode();
+        recursiveOutputButton.setMessage(Component.translatable("gui.pattern_crafter.recursive_outputs.button." + recursiveMode));
+        recursiveOutputButton.setTooltip(Tooltip.create(
+                Component.translatable("gui.pattern_crafter.recursive_outputs.tooltip." + recursiveMode)
+                        .append(Component.literal("\n"))
+                        .append(Component.translatable("gui.pattern_crafter.cycle_hint.line1"))
+                        .append(Component.literal("\n"))
+                        .append(Component.translatable("gui.pattern_crafter.cycle_hint.line2"))));
+
+        int remainderMode = menu.getSyncedRemainderRoutingMode();
+        remainderRoutingButton.setMessage(Component.translatable("gui.pattern_crafter.unused_inputs.button." + remainderMode));
+        remainderRoutingButton.setTooltip(Tooltip.create(
+                Component.translatable("gui.pattern_crafter.unused_inputs.tooltip." + remainderMode)
+                        .append(Component.literal("\n"))
+                        .append(Component.translatable("gui.pattern_crafter.cycle_hint.line1"))
+                        .append(Component.literal("\n"))
+                        .append(Component.translatable("gui.pattern_crafter.cycle_hint.line2"))));
 
         // Update pattern label button text
         int idx = menu.getCurrentPatternIndex();
@@ -447,7 +517,11 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
             filterLabels[i].setValue(letterValue);
 
             if (letterValue == 0) {
-                filterLabels[i].setTooltip(null);
+                filterLabels[i].setTooltip(Tooltip.create(
+                        Component.translatable("gui.pattern_crafter.cycle_hint.line1")
+                                .append(Component.literal("\n"))
+                                .append(Component.translatable("gui.pattern_crafter.cycle_hint.line2"))
+                ));
             } else {
                 // Menu has 18 slots (0–17) showing current page via view; slot i = BE slot slotIndex
                 ItemStack filterItem = menu.getSlot(ImprovedPatternCrafterMenu.INPUT_FILTER_START + i).getItem();
@@ -458,6 +532,10 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
                                     .append(Component.translatable("gui.pattern_crafter.filter_any_item"))
                                     .append(Component.literal("\n"))
                                     .append(Component.translatable("gui.pattern_crafter.filter_excluding_others"))
+                                    .append(Component.literal("\n"))
+                                    .append(Component.translatable("gui.pattern_crafter.cycle_hint.line1"))
+                                    .append(Component.literal("\n"))
+                                    .append(Component.translatable("gui.pattern_crafter.cycle_hint.line2"))
                     ));
                 } else {
                     filterLabels[i].setTooltip(Tooltip.create(
@@ -465,6 +543,10 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
                                     .append(Component.literal("\n"))
                                     .append(Component.translatable("gui.pattern_crafter.filter_allowed_item",
                                             filterItem.getHoverName()))
+                                    .append(Component.literal("\n"))
+                                    .append(Component.translatable("gui.pattern_crafter.cycle_hint.line1"))
+                                    .append(Component.literal("\n"))
+                                    .append(Component.translatable("gui.pattern_crafter.cycle_hint.line2"))
                     ));
                 }
             }
@@ -765,6 +847,37 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Right-click support for cycle buttons: previous = two forward cycles (for 3-state cycles)
+        if (button == 1) {
+            if (craftingModeButton != null && craftingModeButton.isHovered()) {
+                playButtonSound();
+                cycleCraftingMode();
+                cycleCraftingMode();
+                return true;
+            }
+            if (recursiveOutputButton != null && recursiveOutputButton.isHovered()) {
+                playButtonSound();
+                onRecursiveOutputPressed();
+                onRecursiveOutputPressed();
+                return true;
+            }
+            if (remainderRoutingButton != null && remainderRoutingButton.isHovered()) {
+                // 2-state toggle: previous == next
+                playButtonSound();
+                onRemainderRoutingPressed();
+                return true;
+            }
+            if (mouseX >= redstoneButtonX && mouseX < redstoneButtonX + REDSTONE_BUTTON_SIZE
+                    && mouseY >= redstoneButtonY && mouseY < redstoneButtonY + REDSTONE_BUTTON_SIZE) {
+                playButtonSound();
+                // Previous: cycle forward 4 times (5-state cycle)
+                cycleRedstoneMode();
+                cycleRedstoneMode();
+                cycleRedstoneMode();
+                cycleRedstoneMode();
+                return true;
+            }
+        }
         if (button == 0 && mouseX >= redstoneButtonX && mouseX < redstoneButtonX + REDSTONE_BUTTON_SIZE
                 && mouseY >= redstoneButtonY && mouseY < redstoneButtonY + REDSTONE_BUTTON_SIZE) {
             playButtonSound();
@@ -784,9 +897,11 @@ public class ImprovedPatternCrafterScreen extends AbstractContainerScreen<Improv
     private void renderRedstoneTooltip(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         if (mouseX >= redstoneButtonX && mouseX < redstoneButtonX + REDSTONE_BUTTON_SIZE
                 && mouseY >= redstoneButtonY && mouseY < redstoneButtonY + REDSTONE_BUTTON_SIZE) {
-            guiGraphics.renderTooltip(this.font,
-                    Component.translatable("gui.pattern_crafter.redstone_mode." + menu.getRedstoneMode()),
-                    mouseX, mouseY);
+            List<Component> lines = new ArrayList<>();
+            lines.add(Component.translatable("gui.pattern_crafter.redstone_mode." + menu.getRedstoneMode()));
+            lines.add(Component.translatable("gui.pattern_crafter.cycle_hint.line1"));
+            lines.add(Component.translatable("gui.pattern_crafter.cycle_hint.line2"));
+            guiGraphics.renderComponentTooltip(this.font, lines, mouseX, mouseY);
         }
     }
 
