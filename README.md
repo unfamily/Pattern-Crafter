@@ -7,6 +7,6 @@ Now part of Iskandert’s Utilities 3.12.0.0.0+. Do not remove the mod without f
 | Version | Support Status |
 |--------|---------------|
 | 26.1.2 | Not Supported |
-| 1.21.1 | Not Supported |
+| 1.21.1 | Deprecated |
 | 1.20.1 | Not Supported |
 | Older Versions | Not Supported |
